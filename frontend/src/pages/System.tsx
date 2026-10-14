@@ -17,9 +17,9 @@ import {
 } from 'antd';
 import { DownloadOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons';
 import MfaSettings from '../components/MfaSettings';
+import FeUpdateProgress from '../components/FeUpdateProgress';
 import DailyReportCard from '../components/DailyReportCard';
 import {
-  applyFrontendUpdate,
   applyGithubUpdate,
   applyUpdate,
   checkFrontendUpdate,
@@ -71,7 +71,7 @@ export default function System() {
   // 前端热更新（CI 预构建 dist）
   const [feCheck, setFeCheck] = useState<FrontendUpdateCheck | null>(null);
   const [feChecking, setFeChecking] = useState(false);
-  const [feApplying, setFeApplying] = useState(false);
+  const [feProgressOpen, setFeProgressOpen] = useState(false);
 
   const loadLogs = async () => {
     try {
@@ -182,23 +182,8 @@ export default function System() {
       content: '将下载 CI 构建的最新前端静态包并替换当前页面文件，无需重启服务，刷新浏览器即生效。',
       okText: '热更前端',
       cancelText: '取消',
-      onOk: async () => {
-        setFeApplying(true);
-        try {
-          const r = await applyFrontendUpdate();
-          Modal.success({
-            title: '前端已热更',
-            content: (
-              <div>
-                <p>已替换 {r.files} 个文件（构建时间：{r.asset_updated_at ? fmtTime(r.asset_updated_at) : '—'}）。</p>
-                <p style={{ color: '#faad14' }}>{r.notes}</p>
-              </div>
-            ),
-          });
-          setFeCheck(null);
-        } finally {
-          setFeApplying(false);
-        }
+      onOk: () => {
+        setFeProgressOpen(true);
       },
     });
   };
@@ -456,10 +441,15 @@ export default function System() {
                         <Button icon={<ReloadOutlined />} loading={feChecking} onClick={doCheckFeUpdate}>
                           检查前端更新
                         </Button>
-                        <Button icon={<DownloadOutlined />} loading={feApplying} onClick={doApplyFeUpdate}>
+                        <Button icon={<DownloadOutlined />} onClick={doApplyFeUpdate}>
                           热更前端
                         </Button>
                       </Space>
+                      <FeUpdateProgress
+                        open={feProgressOpen}
+                        onClose={() => setFeProgressOpen(false)}
+                        onDone={() => setFeCheck(null)}
+                      />
                       {feCheck && (
                         <Alert
                           type={feCheck.has_update ? 'success' : feCheck.asset_updated_at ? 'info' : 'warning'}
