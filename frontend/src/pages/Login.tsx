@@ -83,10 +83,11 @@ export default function Login() {
     >
       <Card style={{ width: 380 }} bordered={false}>
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
+          <img src="favicon.svg" alt="zy-panel" style={{ width: 52, height: 52, marginBottom: 8 }} />
           <Title level={3} style={{ marginBottom: 4 }}>
-            🐢 OCI 管理面板
+            zy-panel
           </Title>
-          <Paragraph type="secondary">Oracle 云服务器三方管理</Paragraph>
+          <Paragraph type="secondary">多云服务器管理面板</Paragraph>
         </div>
         <Form<LoginForm> form={form} name="login" initialValues={{}} onFinish={doLogin} size="large">
           <Form.Item name="username" rules={[{ required: true, message: '请输入用户名' }]} hidden={mfaRequired}>

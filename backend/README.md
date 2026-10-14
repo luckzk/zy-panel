@@ -1,7 +1,6 @@
-# oci-panel 后端
+# zy-panel 后端
 
-Oracle OCI 云服务器管理面板（重写自开源项目 `oci-helper`）的后端，
-技术栈：**Python + FastAPI + SQLite**。
+多云服务器管理面板的后端，技术栈：**Python + FastAPI + SQLite**。
 
 ## 本地启动
 
@@ -60,11 +59,11 @@ WebSocket：`/ws/logs`（实时日志推送示例）。
 
 ```bash
 cd backend
-docker build -t oci-panel-backend .
-docker run -d --name oci-panel-backend -p 8818:8818 \
+docker build -t zy-panel-backend .
+docker run -d --name zy-panel-backend -p 8818:8818 \
   -e FERNET_KEY=你的密钥 \
-  -v oci-panel-data:/app/data \
-  oci-panel-backend
+  -v zy-panel-data:/app/data \
+  zy-panel-backend
 ```
 
 SQLite 文件在容器内 `/app/data/oci-panel.db`，用 volume 持久化。

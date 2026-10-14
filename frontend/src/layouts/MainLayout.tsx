@@ -134,7 +134,14 @@ export default function MainLayout() {
             overflow: 'hidden',
           }}
         >
-          {collapsed ? '🐢' : '🐢 OCI 面板'}
+          {collapsed ? (
+            <img src="favicon.svg" alt="zy" style={{ width: 28, height: 28 }} />
+          ) : (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <img src="favicon.svg" alt="zy-panel" style={{ width: 26, height: 26 }} />
+              zy-panel
+            </span>
+          )}
         </div>
         <Menu mode="inline" selectedKeys={selectedKey} items={menuItems} theme={dark ? 'dark' : 'light'} />
       </Sider>

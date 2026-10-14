@@ -1,6 +1,6 @@
 """一键 500M 服务：为免费 AMD 实例开启/关闭下行 500Mbps（真实 OCI 调用）。
 
-原理（移植自 Y 探长 oci-helper）：
+原理：
 - 开启：创建 NAT 网关 + NAT 路由表（0.0.0.0/0 -> NAT），删除旧 NLB 后创建公网
   Network Load Balancer（TCP_AND_UDP 全端口监听，后端指向实例私网 IP，
   健康检查走 SSH 端口），VNIC 绑定 NAT 路由表并跳过源/目检查，放行安全组。

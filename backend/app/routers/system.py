@@ -53,7 +53,7 @@ def backup(db: Session = Depends(get_db), user: models.User = Depends(get_admin_
     data = backup_service.export_all(db)
     payload = backup_service.encrypt_payload(data)
     total = sum(len(v) for v in data["tables"].values())
-    filename = f"oci-panel-backup-{datetime.now():%Y%m%d-%H%M%S}.bin"
+    filename = f"zy-panel-backup-{datetime.now():%Y%m%d-%H%M%S}.bin"
     write_log(db, user.id, "system.backup", f"导出加密备份 {filename}，共 {total} 条记录")
     return StreamingResponse(
         io.BytesIO(payload),
@@ -90,7 +90,7 @@ async def restore(
 def version(_user: models.User = Depends(get_current_user)):
     from ..services import update_service
 
-    return ok({"version": update_service.get_current_version(), "name": "oci-panel-backend"})
+    return ok({"version": update_service.get_current_version(), "name": "zy-panel-backend"})
 
 
 class TgBotIn(BaseModel):

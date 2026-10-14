@@ -272,7 +272,7 @@ export default function System() {
                   <Space direction="vertical" style={{ width: '100%' }} size="middle">
                     <Space style={{ width: '100%' }}>
                       <Input
-                        placeholder="https://api.github.com/repos/xxx/oci-panel/releases/latest"
+                        placeholder="https://api.github.com/repos/xxx/zy-panel/releases/latest"
                         value={feedUrl}
                         onChange={(e) => setFeedUrl(e.target.value)}
                         style={{ width: 380 }}
