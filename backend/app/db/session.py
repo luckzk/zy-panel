@@ -20,10 +20,23 @@ def _ensure_sqlite_dir(database_url: str) -> None:
 
 
 _settings = get_settings()
-_ensure_sqlite_dir(_settings.database_url)
 
-_connect_args = {"check_same_thread": False} if "sqlite" in _settings.database_url else {}
-engine = create_engine(_settings.database_url, connect_args=_connect_args)
+
+def _resolve_database_url(url: str) -> str:
+    """品牌重命名迁移：默认库文件名由 oci-panel.db 改为 zy-panel.db；
+    若老文件存在而新文件不存在，继续沿用老文件，避免数据丢失。"""
+    if url == "sqlite:///./data/zy-panel.db":
+        old, new = "./data/oci-panel.db", "./data/zy-panel.db"
+        if os.path.exists(old) and not os.path.exists(new):
+            return "sqlite:///./data/oci-panel.db"
+    return url
+
+
+DATABASE_URL = _resolve_database_url(_settings.database_url)
+_ensure_sqlite_dir(DATABASE_URL)
+
+_connect_args = {"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
+engine = create_engine(DATABASE_URL, connect_args=_connect_args)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 

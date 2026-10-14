@@ -219,3 +219,31 @@ def apply_github_update(
         f"从 GitHub {gh.get('repo')}@{gh.get('branch')} 更新至 {gh.get('sha')}，备份于 {result['backup_dir']}",
     )
     return ok(result)
+
+
+@router.get("/update/frontend/check", summary="检查前端 dist 更新（CI 构建）")
+def check_frontend_update(_user: models.User = Depends(get_current_user)):
+    from ..services import update_service
+
+    return ok(update_service.frontend_check())
+
+
+@router.post("/update/frontend/apply", summary="热更前端 dist（仅管理员）")
+def apply_frontend_update(
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_admin_user),
+):
+    from ..services import update_service
+
+    try:
+        result = update_service.frontend_apply()
+    except ValueError as exc:
+        return err(7010, str(exc), status=400)
+    except Exception as exc:
+        log.exception("前端热更新未知异常")
+        return err(7011, f"前端热更新失败：{str(exc)[:200]}", status=500)
+    write_log(
+        db, user.id, "system.update_frontend_apply",
+        f"前端热更新至 {result['asset_updated_at']}，{result['files']} 个文件",
+    )
+    return ok(result)

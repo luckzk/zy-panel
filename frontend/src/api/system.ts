@@ -128,6 +128,37 @@ export interface GithubApplyResult extends UpdateApplyResult {
   github: { repo: string; branch: string; sha: string; message: string };
 }
 
+export interface FrontendUpdateCheck {
+  repo: string;
+  release_tag: string;
+  has_update: boolean;
+  notes: string;
+  asset_updated_at: string;
+  asset_size: number;
+  applied_asset_updated_at: string;
+}
+
+export interface FrontendApplyResult {
+  applied: boolean;
+  files: number;
+  asset_updated_at: string;
+  asset_size: number;
+  target_dir: string;
+  notes: string;
+}
+
+/** 检查前端 dist 更新（CI 构建） */
+export async function checkFrontendUpdate(): Promise<FrontendUpdateCheck> {
+  const resp = await api.get('/api/v1/system/update/frontend/check');
+  return resp.data as FrontendUpdateCheck;
+}
+
+/** 热更前端 dist */
+export async function applyFrontendUpdate(): Promise<FrontendApplyResult> {
+  const resp = await api.post('/api/v1/system/update/frontend/apply', {}, { timeout: 300000 });
+  return resp.data as FrontendApplyResult;
+}
+
 /** 获取 GitHub 更新配置 */
 export async function getGithubUpdateConfig(): Promise<GithubUpdateConfig> {
   const resp = await api.get('/api/v1/system/update/github/config');

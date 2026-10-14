@@ -19,8 +19,10 @@ import { DownloadOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/ic
 import MfaSettings from '../components/MfaSettings';
 import DailyReportCard from '../components/DailyReportCard';
 import {
+  applyFrontendUpdate,
   applyGithubUpdate,
   applyUpdate,
+  checkFrontendUpdate,
   checkGithubUpdate,
   checkUpdate,
   downloadBackup,
@@ -30,6 +32,7 @@ import {
   restoreBackup,
   saveGithubUpdateConfig,
   setUpdateFeed,
+  type FrontendUpdateCheck,
   type GithubUpdateCheck,
   type LogItem,
   type UpdateCheck,
@@ -65,6 +68,10 @@ export default function System() {
   const [ghCheck, setGhCheck] = useState<GithubUpdateCheck | null>(null);
   const [ghChecking, setGhChecking] = useState(false);
   const [ghApplying, setGhApplying] = useState(false);
+  // 前端热更新（CI 预构建 dist）
+  const [feCheck, setFeCheck] = useState<FrontendUpdateCheck | null>(null);
+  const [feChecking, setFeChecking] = useState(false);
+  const [feApplying, setFeApplying] = useState(false);
 
   const loadLogs = async () => {
     try {
@@ -157,6 +164,45 @@ export default function System() {
     }
   };
 
+  const doCheckFeUpdate = async () => {
+    setFeChecking(true);
+    try {
+      const info = await checkFrontendUpdate();
+      setFeCheck(info);
+      if (info.has_update) message.success('前端有新构建');
+      else if (!info.notes) message.info('前端已是最新构建');
+    } finally {
+      setFeChecking(false);
+    }
+  };
+
+  const doApplyFeUpdate = () => {
+    Modal.confirm({
+      title: '热更前端？',
+      content: '将下载 CI 构建的最新前端静态包并替换当前页面文件，无需重启服务，刷新浏览器即生效。',
+      okText: '热更前端',
+      cancelText: '取消',
+      onOk: async () => {
+        setFeApplying(true);
+        try {
+          const r = await applyFrontendUpdate();
+          Modal.success({
+            title: '前端已热更',
+            content: (
+              <div>
+                <p>已替换 {r.files} 个文件（构建时间：{r.asset_updated_at ? fmtTime(r.asset_updated_at) : '—'}）。</p>
+                <p style={{ color: '#faad14' }}>{r.notes}</p>
+              </div>
+            ),
+          });
+          setFeCheck(null);
+        } finally {
+          setFeApplying(false);
+        }
+      },
+    });
+  };
+
   const doApplyGhUpdate = () => {
     Modal.confirm({
       title: '从 GitHub 更新并重启？',
@@ -175,15 +221,9 @@ export default function System() {
               <div>
                 <p>提交信息：{r.github.message || '—'}</p>
                 <p>后端代码：{r.backend_changed ? '已更新' : '无变化'}</p>
-                <p>前端代码：{r.frontend_changed ? '有变更，需重新构建' : '无变化'}</p>
+                <p>前端代码：{r.frontend_changed ? '仓库中有变更，可在下方"前端热更新"一键热更' : '无变化'}</p>
                 {r.notes && <p>{r.notes}</p>}
                 <p style={{ color: '#faad14' }}>{r.restart}</p>
-                {r.frontend_changed && (
-                  <p style={{ color: '#faad14' }}>
-                    前端 dist 在构建时打包，容器内无法热更：请在服务器执行
-                    <Text code>docker compose up --build -d</Text> 完成前端更新。
-                  </p>
-                )}
                 <Text type="secondary" style={{ fontSize: 12 }}>备份位于：{r.backup_dir}</Text>
               </div>
             ),
@@ -400,6 +440,43 @@ export default function System() {
                                   {ghCheck.last_applied_sha ? ` · 上次应用 ${ghCheck.last_applied_sha.slice(0, 12)}` : ''}
                                 </Text>
                               </div>
+                            ) : undefined
+                          }
+                        />
+                      )}
+                    </Space>
+                  </div>
+                  <div style={{ borderTop: '1px dashed #d9d9d9', paddingTop: 16 }}>
+                    <p style={{ marginBottom: 8, color: '#666' }}>
+                      前端热更新：GitHub Actions 会在前端代码变更时自动构建静态包并发布到仓库的
+                      <Text code>frontend-latest</Text> Release，面板下载后直接替换页面文件，无需重建容器。
+                    </p>
+                    <Space direction="vertical" style={{ width: '100%' }} size="middle">
+                      <Space>
+                        <Button icon={<ReloadOutlined />} loading={feChecking} onClick={doCheckFeUpdate}>
+                          检查前端更新
+                        </Button>
+                        <Button icon={<DownloadOutlined />} loading={feApplying} onClick={doApplyFeUpdate}>
+                          热更前端
+                        </Button>
+                      </Space>
+                      {feCheck && (
+                        <Alert
+                          type={feCheck.has_update ? 'success' : feCheck.asset_updated_at ? 'info' : 'warning'}
+                          showIcon
+                          message={
+                            feCheck.has_update
+                              ? `前端有新构建（${feCheck.asset_updated_at ? fmtTime(feCheck.asset_updated_at) : ''}，${(feCheck.asset_size / 1024).toFixed(0)} KB）`
+                              : feCheck.asset_updated_at
+                                ? '前端已是最新构建'
+                                : `检查失败：${feCheck.notes}`
+                          }
+                          description={
+                            feCheck.asset_updated_at ? (
+                              <Text type="secondary" style={{ fontSize: 12 }}>
+                                Release: {feCheck.repo}@{feCheck.release_tag}
+                                {feCheck.applied_asset_updated_at ? ` · 已应用构建：${fmtTime(feCheck.applied_asset_updated_at)}` : ''}
+                              </Text>
                             ) : undefined
                           }
                         />

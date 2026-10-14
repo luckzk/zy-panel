@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     fernet_key: str | None = None
 
     # --- 数据库 ---
-    database_url: str = "sqlite:///./data/oci-panel.db"
+    database_url: str = "sqlite:///./data/zy-panel.db"
 
     # --- CORS ---
     cors_origins: list[str] = ["*"]

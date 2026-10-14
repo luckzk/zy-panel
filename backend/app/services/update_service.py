@@ -39,6 +39,11 @@ GH_SHA_KEY = "update_github_last_sha"    # 上次从 GitHub 应用的 commit sha
 GH_API = "https://api.github.com"
 GH_RAW = "https://raw.githubusercontent.com"
 
+# ---- 前端热更新（GitHub Actions 预构建的 dist.zip） ----
+FE_RELEASE_TAG = "frontend-latest"       # 滚动 Release 的 tag
+FE_ASSET_NAME = "dist.zip"
+FE_UPDATED_KEY = "update_frontend_asset_updated"  # 上次应用的 dist.zip asset 更新时间
+
 
 def get_current_version() -> str:
     try:
@@ -306,6 +311,142 @@ def github_apply() -> dict:
         "sha": info["sha"][:12], "message": info["message"],
     }
     return result
+
+
+# ============ 前端热更新（GitHub Actions 预构建 dist.zip） ============
+
+def _frontend_dir() -> str:
+    """前端静态文件目录：docker 内为与 nginx 容器共享的卷 /app/frontend_dist；
+    本地开发时回退到 backend/frontend_dist。"""
+    shared = "/app/frontend_dist"
+    if os.path.isdir(shared):
+        return shared
+    d = os.path.join(_app_root(), "frontend_dist")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _gh_release(owner: str, name: str, token: str) -> dict:
+    """取 frontend-latest 滚动 Release。失败抛 ValueError（中文说明）。"""
+    url = f"{GH_API}/repos/{owner}/{name}/releases/tags/{FE_RELEASE_TAG}"
+    try:
+        resp = httpx.get(url, headers=_gh_headers(token), timeout=20, follow_redirects=True)
+    except Exception as exc:
+        raise ValueError(f"连接 GitHub 失败：{str(exc)[:120]}")
+    if resp.status_code == 404:
+        raise ValueError("CI 尚未构建过前端（frontend-latest Release 不存在），请先让 GitHub Actions 跑一次")
+    if resp.status_code in (401, 403):
+        raise ValueError("GitHub 认证失败：Token 无效或无权访问该仓库")
+    if resp.status_code != 200:
+        raise ValueError(f"GitHub 返回异常状态码 {resp.status_code}")
+    return resp.json()
+
+
+def _gh_dist_asset(release: dict) -> dict:
+    for a in release.get("assets") or []:
+        if a.get("name") == FE_ASSET_NAME:
+            return a
+    raise ValueError("Release 中没有 dist.zip（CI 构建可能失败了）")
+
+
+def frontend_check() -> dict:
+    """检查前端 dist 是否有新构建。"""
+    cfg = get_github_config()
+    result = {
+        "repo": cfg["repo"], "release_tag": FE_RELEASE_TAG,
+        "has_update": False, "notes": "",
+        "asset_updated_at": "", "asset_size": 0,
+        "applied_asset_updated_at": _get_setting(FE_UPDATED_KEY),
+    }
+    if not cfg["repo"]:
+        result["notes"] = "未配置 GitHub 仓库地址"
+        return result
+    try:
+        owner, name = _parse_repo(cfg["repo"])
+    except ValueError as exc:
+        result["notes"] = str(exc)
+        return result
+    try:
+        asset = _gh_dist_asset(_gh_release(owner, name, _get_gh_token()))
+    except ValueError as exc:
+        result["notes"] = str(exc)
+        return result
+    result["asset_updated_at"] = asset.get("updated_at") or ""
+    result["asset_size"] = asset.get("size") or 0
+    stored = result["applied_asset_updated_at"]
+    result["has_update"] = bool(result["asset_updated_at"]) and result["asset_updated_at"] != stored
+    if not result["has_update"]:
+        result["notes"] = "前端已是最新构建" if stored else "无法判断构建时间"
+    return result
+
+
+def _safe_extract(zf: zipfile.ZipFile, target: str) -> list:
+    """安全解压：拒绝绝对路径与 .. 跳出。返回解压的文件列表。"""
+    names = []
+    for info in zf.infolist():
+        n = info.filename
+        if n.startswith("/") or n.startswith("\\") or ".." in n.split("/"):
+            raise ValueError(f"更新包中存在非法路径：{n[:80]}")
+        names.append(n)
+    # 要求顶层包含 index.html（允许 ./index.html 形式）
+    roots = {n.lstrip("./") for n in names}
+    if "index.html" not in roots:
+        raise ValueError("dist.zip 结构不正确：顶层未找到 index.html")
+    zf.extractall(target)
+    return names
+
+
+def frontend_apply() -> dict:
+    """下载 CI 构建的 dist.zip 并热更到前端目录（nginx 即时生效，无需重建）。"""
+    cfg = get_github_config()
+    if not cfg["repo"]:
+        raise ValueError("未配置 GitHub 仓库地址")
+    owner, name = _parse_repo(cfg["repo"])
+    token = _get_gh_token()
+    asset = _gh_dist_asset(_gh_release(owner, name, token))
+    # 走 API asset 地址 + octet-stream（公开/私有仓库通用，token 自动处理）
+    headers = _gh_headers(token)
+    headers["Accept"] = "application/octet-stream"
+    try:
+        resp = httpx.get(asset["url"], headers=headers, timeout=300, follow_redirects=True)
+    except Exception as exc:
+        raise ValueError(f"下载 dist.zip 失败：{str(exc)[:150]}")
+    if resp.status_code != 200 or not resp.content.startswith(b"PK"):
+        raise ValueError(f"下载 dist.zip 失败：GitHub 返回 {resp.status_code}")
+
+    tmp = tempfile.mkdtemp(prefix="zy-frontend-")
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(resp.content))
+        names = _safe_extract(zf, tmp)
+    except ValueError:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise
+    target = _frontend_dir()
+    # 清空旧文件后移入新文件（避免残留过期资源）
+    for entry in os.listdir(target):
+        p = os.path.join(target, entry)
+        if os.path.isdir(p) and not os.path.islink(p):
+            shutil.rmtree(p, ignore_errors=True)
+        else:
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+    moved = 0
+    for entry in os.listdir(tmp):
+        shutil.move(os.path.join(tmp, entry), os.path.join(target, entry))
+        moved += 1
+    shutil.rmtree(tmp, ignore_errors=True)
+
+    _set_setting(FE_UPDATED_KEY, asset.get("updated_at") or "")
+    return {
+        "applied": True,
+        "files": moved,
+        "asset_updated_at": asset.get("updated_at") or "",
+        "asset_size": asset.get("size") or 0,
+        "target_dir": target,
+        "notes": "前端静态文件已热更，刷新浏览器即生效（如仍显示旧页面请 Ctrl+Shift+R 硬刷新）",
+    }
 
 
 def _app_root() -> str:

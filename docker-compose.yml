@@ -11,8 +11,10 @@ services:
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
       - FERNET_KEY=${FERNET_KEY:-}
     volumes:
-      # SQLite 数据文件持久化（容器内路径 /app/data/oci-panel.db）
+      # SQLite 数据文件持久化（容器内路径 /app/data/zy-panel.db）
       - ./data:/app/data
+      # 前端热更新：与 nginx 容器共享静态文件目录（首次创建时从镜像复制）
+      - frontend_dist:/app/frontend_dist
 
   zy-panel-frontend:
     build:
@@ -23,3 +25,8 @@ services:
       - "8080:80"
     depends_on:
       - zy-panel-backend
+    volumes:
+      - frontend_dist:/usr/share/nginx/html
+
+volumes:
+  frontend_dist:
