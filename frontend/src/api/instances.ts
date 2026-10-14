@@ -6,6 +6,7 @@ export interface InstanceQuery {
   tenant_id: number;
   state?: string;
   search?: string;
+  region_id?: string;
   page?: number;
   page_size?: number;
 }

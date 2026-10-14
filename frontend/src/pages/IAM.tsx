@@ -18,6 +18,7 @@ import {
 import { KeyOutlined, PlusOutlined, SafetyOutlined, TeamOutlined, UserOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { listTenants, type TenantOption } from '../api/tenants';
+import AliyunRam from '../components/AliyunRam';
 import {
   addGroupMember,
   createAuthToken,
@@ -304,6 +305,12 @@ export default function IAM() {
   ];
 
   const credDeletable = (state: string) => state === 'ACTIVE';
+
+  // 阿里云租户走 RAM 管理界面（OCI IAM 接口不适用）
+  const currentTenant = tenants.find((t) => t.id === tenantId);
+  if (currentTenant?.provider === 'aliyun') {
+    return <AliyunRam tenantId={tenantId} tenants={tenants} onTenantChange={setTenantId} />;
+  }
 
   return (
     <Card

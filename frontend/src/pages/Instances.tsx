@@ -31,7 +31,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import type { Instance, InstanceStatus } from '../types';
 import { getShapes, type Shape as ShapeMeta } from '../api/meta';
-import { listTenants, type TenantOption } from '../api/tenants';
+import { listTenants, listTenantRegions, type CloudRegion, type TenantOption } from '../api/tenants';
 import { getProviderMeta } from '../providers/registry';
 import {
   changeShape,
@@ -72,6 +72,10 @@ export default function Instances() {
   const [tenantsLoaded, setTenantsLoaded] = useState(false);
   const [keyword, setKeyword] = useState('');
   const [statusFilter, setStatusFilter] = useState<InstanceStatus>();
+  // 阿里云地域选择（租户默认地域为初始值）
+  const [regionId, setRegionId] = useState<string>();
+  const [regionOptions, setRegionOptions] = useState<CloudRegion[]>([]);
+  const [regionLoading, setRegionLoading] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([]);
   const [opLoading, setOpLoading] = useState(false);
   const navigate = useNavigate();
@@ -111,12 +115,12 @@ export default function Instances() {
       .finally(() => setTenantsLoaded(true));
   }, []);
 
-  /** 按租户拉取实例列表（真实 OCI 查询） */
-  const fetchInstances = useCallback(async (tid: number, tname: string) => {
+  /** 按租户拉取实例列表（regionId 仅阿里云有效，不传则用租户默认地域） */
+  const fetchInstances = useCallback(async (tid: number, tname: string, region?: string) => {
     setLoading(true);
     try {
       // 个人面板实例数有限，一次拉 200 条，前端做筛选
-      const { items } = await listInstances({ tenant_id: tid, page_size: 200 }, tname);
+      const { items } = await listInstances({ tenant_id: tid, page_size: 200, region_id: region }, tname);
       setList(items);
     } catch {
       setList([]);
@@ -128,15 +132,34 @@ export default function Instances() {
   const refresh = useCallback(() => {
     if (tenantId === undefined) return;
     const t = tenants.find((x) => x.id === tenantId);
-    fetchInstances(tenantId, t?.name ?? '');
+    fetchInstances(tenantId, t?.name ?? '', t?.provider === 'aliyun' ? regionId : undefined);
     setSelectedKeys([]);
-  }, [tenantId, tenants, fetchInstances]);
+  }, [tenantId, tenants, fetchInstances, regionId]);
 
+  /** 租户切换：阿里云租户拉取地域列表并默认选中租户地域 */
   useEffect(() => {
     if (tenantId === undefined) return;
     const t = tenants.find((x) => x.id === tenantId);
-    fetchInstances(tenantId, t?.name ?? '');
     setSelectedKeys([]);
+    if (t?.provider === 'aliyun') {
+      setRegionLoading(true);
+      listTenantRegions(tenantId)
+        .then((rs) => {
+          setRegionOptions(rs);
+          const def = t.region || rs[0]?.id;
+          setRegionId(def);
+          fetchInstances(tenantId, t.name, def);
+        })
+        .catch(() => {
+          setRegionOptions([]);
+          fetchInstances(tenantId, t.name, t.region || undefined);
+        })
+        .finally(() => setRegionLoading(false));
+    } else {
+      setRegionOptions([]);
+      setRegionId(undefined);
+      fetchInstances(tenantId, t?.name ?? '');
+    }
   }, [tenantId, tenants, fetchInstances]);
 
   const filtered = useMemo(
@@ -367,6 +390,21 @@ export default function Instances() {
           onChange={setTenantId}
           options={tenants.map((t) => ({ value: t.id, label: `${t.name}（${t.region}）` }))}
         />
+        {tenants.find((t) => t.id === tenantId)?.provider === 'aliyun' && (
+          <Select
+            placeholder="选择地域"
+            style={{ width: 220 }}
+            value={regionId}
+            loading={regionLoading}
+            onChange={(v) => {
+              setRegionId(v);
+              const t = tenants.find((x) => x.id === tenantId);
+              if (tenantId !== undefined) fetchInstances(tenantId, t?.name ?? '', v);
+              setSelectedKeys([]);
+            }}
+            options={regionOptions.map((r) => ({ value: r.id, label: r.name ? `${r.name}（${r.id}）` : r.id }))}
+          />
+        )}
         <Input
           placeholder="搜索名称 / 公网 IP"
           prefix={<SearchOutlined />}

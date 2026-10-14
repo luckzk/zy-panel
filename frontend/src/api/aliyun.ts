@@ -210,3 +210,54 @@ export async function pauseAliSpotTask(id: number): Promise<void> {
 export async function deleteAliSpotTask(id: number): Promise<void> {
   await api.delete(`/api/v1/aliyun/spot-tasks/${id}`);
 }
+
+export interface RamUser {
+  user_name: string;
+  display_name: string;
+  mobile: string;
+  email: string;
+  comments: string;
+  create_date: string;
+}
+
+export interface RamAccessKey {
+  access_key_id: string;
+  status: string;
+  create_date: string;
+}
+
+/** RAM 用户列表 */
+export async function listRamUsers(tenantId: number): Promise<RamUser[]> {
+  const resp = await api.get('/api/v1/aliyun/ram/users', { params: { tenant_id: tenantId } });
+  return resp.data as RamUser[];
+}
+
+/** 创建 RAM 用户 */
+export async function createRamUser(tenantId: number, body: {
+  user_name: string; display_name?: string; mobile_phone?: string; email?: string; comments?: string;
+}): Promise<{ user_name: string }> {
+  const resp = await api.post('/api/v1/aliyun/ram/users', { tenant_id: tenantId, ...body });
+  return resp.data as { user_name: string };
+}
+
+/** 删除 RAM 用户（含其 AccessKey） */
+export async function deleteRamUser(tenantId: number, userName: string): Promise<void> {
+  await api.delete(`/api/v1/aliyun/ram/users/${encodeURIComponent(userName)}`, { params: { tenant_id: tenantId } });
+}
+
+/** RAM 用户 AccessKey 列表 */
+export async function listRamAccessKeys(tenantId: number, userName: string): Promise<RamAccessKey[]> {
+  const resp = await api.get(`/api/v1/aliyun/ram/users/${encodeURIComponent(userName)}/keys`, { params: { tenant_id: tenantId } });
+  return resp.data as RamAccessKey[];
+}
+
+/** 创建 AccessKey（Secret 仅返回一次） */
+export async function createRamAccessKey(tenantId: number, userName: string): Promise<{ access_key_id: string; access_key_secret: string }> {
+  const resp = await api.post(`/api/v1/aliyun/ram/users/${encodeURIComponent(userName)}/keys`, { tenant_id: tenantId });
+  return resp.data as { access_key_id: string; access_key_secret: string };
+}
+
+/** 删除 AccessKey */
+export async function deleteRamAccessKey(tenantId: number, userName: string, keyId: string): Promise<void> {
+  await api.delete(`/api/v1/aliyun/ram/users/${encodeURIComponent(userName)}/keys/${encodeURIComponent(keyId)}`, { params: { tenant_id: tenantId } });
+}
