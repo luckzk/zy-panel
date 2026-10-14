@@ -1,0 +1,100 @@
+Metadata-Version: 2.4
+Name: oci-panel-backend
+Version: 0.1.0
+Summary: Oracle OCI 云服务器管理面板（oci-helper 重写版）后端 - FastAPI
+License: Apache-2.0
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: fastapi>=0.115
+Requires-Dist: uvicorn[standard]>=0.30
+Requires-Dist: sqlalchemy>=2.0
+Requires-Dist: pydantic>=2.0
+Requires-Dist: pydantic-settings>=2.0
+Requires-Dist: pyjwt>=2.8
+Requires-Dist: passlib[bcrypt]>=1.7.4
+Requires-Dist: bcrypt==4.0.1
+Requires-Dist: cryptography>=42.0
+Requires-Dist: apscheduler>=3.10
+Requires-Dist: oci>=2.140
+Requires-Dist: httpx>=0.27
+Requires-Dist: python-multipart>=0.0.9
+Requires-Dist: paramiko>=3.4
+Requires-Dist: pyotp>=2.9
+Requires-Dist: qrcode[pil]>=7.4
+
+# oci-panel 后端
+
+Oracle OCI 云服务器管理面板（重写自开源项目 `oci-helper`）的后端，
+技术栈：**Python + FastAPI + SQLite**。
+
+## 本地启动
+
+```bash
+cd backend
+
+# 1. 建虚拟环境并安装依赖（PEP 517，pyproject.toml）
+python -m venv .venv && source .venv/bin/activate
+pip install -e .
+
+# 2. 生成 Fernet 密钥（用于加密租户私钥，生产环境务必固定）
+export FERNET_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+
+# 3. 启动（默认 8818 端口）
+uvicorn app.main:app --port 8818 --reload
+```
+
+启动后访问：
+
+- 接口文档：http://127.0.0.1:8818/docs
+- 健康检查：http://127.0.0.1:8818/
+
+默认管理员账号：`admin` / `admin123`（首次登录后请修改）。
+
+## 登录试一刀
+
+```bash
+curl -s -X POST http://127.0.0.1:8818/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"admin123"}'
+```
+
+## 接口契约
+
+所有 HTTP 路由挂载在 `/api/v1` 前缀，统一响应信封：
+
+```json
+{"code": 0, "msg": "ok", "data": {...}}
+```
+
+| 模块 | 前缀 | 说明 |
+|---|---|---|
+| 认证 | `/api/v1/auth` | 登录（bcrypt+JWT 真实跑通）、改密 |
+| 租户配置 | `/api/v1/tenants` | CRUD 真实落库，私钥 Fernet 加密 |
+| 实例管理 | `/api/v1/instances` | 桩（mock 数据） |
+| 抢机任务 | `/api/v1/snatch-tasks` | CRUD + 状态机真实落库 |
+| 网络 | `/api/v1/network` | 换 IP 任务落库、安全规则桩 |
+| 引导卷 | `/api/v1/volumes` | 桩 |
+| 监控 | `/api/v1/monitoring` | 流量 mock 时序、配额桩 |
+| DNS | `/api/v1/dns` | 记录 CRUD 真实落库 |
+| 系统 | `/api/v1/system` | 日志查询、备份桩 |
+
+WebSocket：`/ws/logs`（实时日志推送示例）。
+
+## Docker 部署
+
+```bash
+cd backend
+docker build -t oci-panel-backend .
+docker run -d --name oci-panel-backend -p 8818:8818 \
+  -e FERNET_KEY=你的密钥 \
+  -v oci-panel-data:/app/data \
+  oci-panel-backend
+```
+
+SQLite 文件在容器内 `/app/data/oci-panel.db`，用 volume 持久化。
+
+## 备注
+
+- `oci`（Oracle 官方 SDK）已列入依赖，真实 OCI 调用在各路由/ worker 的 `TODO` 处接入，
+  客户端构建统一走 `app/services/oci_factory.py`。
+- 抢机 worker 骨架在 `app/workers/snatch_worker.py`，APScheduler 每 15 秒轮询 `running` 任务。

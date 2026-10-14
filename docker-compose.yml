@@ -1,0 +1,25 @@
+
+services:
+  oci-panel-backend:
+    build:
+      context: ./backend
+    container_name: oci-panel-backend
+    restart: unless-stopped
+    ports:
+      - "8818:8818"
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+      - FERNET_KEY=${FERNET_KEY:-}
+    volumes:
+      # SQLite 数据文件持久化（容器内路径 /app/data/oci-panel.db）
+      - ./data:/app/data
+
+  oci-panel-frontend:
+    build:
+      context: ./frontend
+    container_name: oci-panel-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - oci-panel-backend

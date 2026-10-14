@@ -1,0 +1,30 @@
+# 密钥与本地配置（绝不提交）
+.env
+.env.*
+!.env.example
+backend/.env
+frontend/.env
+*.pem
+*.key
+
+# 数据与运行时
+data/
+*.db
+*.db-journal
+*.log
+update_backups/
+
+# 依赖与构建产物
+backend/.venv/
+backend/build/
+frontend/node_modules/
+frontend/dist/
+__pycache__/
+*.pyc
+*.pyo
+
+# 打包产物
+oci-panel.zip
+
+# 系统文件
+.DS_Store

@@ -1,0 +1,248 @@
+/* 未来主义主题的补充样式：辉光 / 滚动条 / 选中态，全部作用域限定在 .theme-futuristic */
+.theme-futuristic {
+  --neon: #22d3ee;
+  --neon-cyan: #22d3ee;
+}
+
+/* 页面底：冷蓝黑（模板基底 #070B14），氛围由散景光斑组件提供 */
+.theme-futuristic body {
+  background: #070b14;
+}
+
+/* 内容区 Layout 透明，让散景光斑从页面底透出来（侧栏/顶栏保持深色面板） */
+.theme-futuristic .ant-layout {
+  background: transparent;
+}
+
+/* 细滚动条 */
+.theme-futuristic ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.theme-futuristic ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.theme-futuristic ::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.22);
+  border-radius: 8px;
+}
+.theme-futuristic ::-webkit-scrollbar-thumb:hover {
+  background: rgba(34, 211, 238, 0.35);
+}
+
+/* 卡片：模板同款 bg-slate-900/50 + border-slate-700/50 + backdrop-blur-sm */
+.theme-futuristic .ant-card {
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border-color: rgba(51, 65, 85, 0.5);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.theme-futuristic .ant-card:hover {
+  border-color: rgba(34, 211, 238, 0.25);
+  box-shadow: 0 0 28px rgba(34, 211, 238, 0.06), 0 12px 40px rgba(0, 0, 0, 0.55);
+}
+
+/* 主按钮：霓虹青底 + 深青黑字 + 辉光 */
+.theme-futuristic .ant-btn-primary {
+  color: #062a33;
+  font-weight: 600;
+  border: none;
+  box-shadow: 0 0 18px rgba(34, 211, 238, 0.35);
+}
+.theme-futuristic .ant-btn-primary:not(:disabled):hover {
+  color: #062a33;
+  box-shadow: 0 0 28px rgba(34, 211, 238, 0.55);
+}
+.theme-futuristic .ant-btn-primary:disabled {
+  color: rgba(6, 42, 51, 0.45);
+}
+
+/* 侧边菜单选中项：左侧霓虹指示条 + 外发光（模板 Overview 选中态） */
+.theme-futuristic .ant-menu-dark .ant-menu-item-selected {
+  box-shadow: inset 2px 0 0 var(--neon), 0 0 18px rgba(34, 211, 238, 0.12);
+  border: 1px solid rgba(34, 211, 238, 0.25);
+}
+
+/* 大数字：轻微的文字辉光，贴近模板的发光数字感 */
+.theme-futuristic .ant-statistic-content-value {
+  text-shadow: 0 0 24px rgba(34, 211, 238, 0.25);
+}
+
+/* 输入框聚焦：霓虹描边 */
+.theme-futuristic .ant-input:focus,
+.theme-futuristic .ant-input-focused,
+.theme-futuristic .ant-input-affix-wrapper:focus,
+.theme-futuristic .ant-input-affix-wrapper-focused {
+  box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.18);
+}
+
+/* 模态框：顶部一条霓虹线 */
+.theme-futuristic .ant-modal-content {
+  position: relative;
+  overflow: hidden;
+}
+.theme-futuristic .ant-modal-content::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 8%;
+  right: 8%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--neon), var(--neon-cyan), transparent);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+/* 分段选择器（主题切换器）选中项 */
+.theme-futuristic .ant-segmented-item-selected {
+  box-shadow: 0 0 12px rgba(34, 211, 238, 0.25);
+}
+
+/* ============ 动态层：让主题"活"起来 ============ */
+
+/* 散景粒子背景（模板同款）：fixed 全屏渐变 + canvas 粒子场，内容之下
+   见 FuturisticBackground.tsx（移植自模板 dashboard.tsx 的 canvas 粒子实现） */
+.fut-bokeh {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background: linear-gradient(to bottom right, #000000, #0f172a); /* from-black to-slate-900 */
+}
+.fut-bokeh-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.3;
+}
+.theme-futuristic #root {
+  position: relative;
+  z-index: 1;
+}
+
+/* 卡片入场：升起 + 淡入；Row 内按列错峰 */
+.theme-futuristic .ant-layout-content .ant-card {
+  animation: fut-rise 0.55s cubic-bezier(0.21, 0.65, 0.35, 1.12) both;
+}
+.theme-futuristic .ant-layout-content .ant-row > .ant-col:nth-child(2) .ant-card { animation-delay: 0.07s; }
+.theme-futuristic .ant-layout-content .ant-row > .ant-col:nth-child(3) .ant-card { animation-delay: 0.14s; }
+.theme-futuristic .ant-layout-content .ant-row > .ant-col:nth-child(4) .ant-card { animation-delay: 0.21s; }
+.theme-futuristic .ant-layout-content .ant-row > .ant-col:nth-child(5) .ant-card { animation-delay: 0.28s; }
+.theme-futuristic .ant-layout-content .ant-row > .ant-col:nth-child(6) .ant-card { animation-delay: 0.35s; }
+.theme-futuristic .ant-layout-content .ant-row > .ant-col:nth-child(7) .ant-card { animation-delay: 0.42s; }
+.theme-futuristic .ant-layout-content .ant-row > .ant-col:nth-child(8) .ant-card { animation-delay: 0.49s; }
+@keyframes fut-rise {
+  from { opacity: 0; transform: translateY(18px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* 状态点呼吸：成功/进行中的圆点外扩散涟漪 */
+.theme-futuristic .ant-badge-status-success,
+.theme-futuristic .ant-badge-status-processing {
+  position: relative;
+}
+.theme-futuristic .ant-badge-status-success::after,
+.theme-futuristic .ant-badge-status-processing::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid rgba(34, 197, 94, 0.55);
+  animation: fut-ping 1.9s cubic-bezier(0, 0, 0.2, 1) infinite;
+  pointer-events: none;
+}
+.theme-futuristic .ant-badge-status-processing::after {
+  border-color: rgba(34, 211, 238, 0.55);
+}
+@keyframes fut-ping {
+  0% { transform: scale(0.55); opacity: 1; }
+  80%, 100% { transform: scale(1.35); opacity: 0; }
+}
+
+/* 进度条流光：高光周期性扫过 */
+.theme-futuristic .ant-progress-bg {
+  position: relative;
+  overflow: hidden;
+}
+.theme-futuristic .ant-progress-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 25%, rgba(255, 255, 255, 0.38) 50%, transparent 75%);
+  transform: translateX(-110%);
+  animation: fut-sheen 3s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes fut-sheen {
+  55%, 100% { transform: translateX(110%); }
+}
+
+/* 页签指示条辉光 */
+.theme-futuristic .ant-tabs-ink-bar {
+  box-shadow: 0 0 12px rgba(34, 211, 238, 0.85);
+}
+
+/* 侧边菜单悬停：轻微右移 + 辉光 */
+.theme-futuristic .ant-menu-dark .ant-menu-item:not(.ant-menu-item-selected):hover {
+  transform: translateX(2px);
+  box-shadow: 0 0 14px rgba(34, 211, 238, 0.08);
+}
+
+/* ---------- FutCard：复刻 v0 模板 shadcn 卡片 ---------- */
+.theme-futuristic .fut-card {
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(51, 65, 85, 0.5);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.theme-futuristic .fut-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 20px 12px;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+}
+.theme-futuristic .fut-card-title {
+  color: #f1f5f9;
+  font-weight: 600;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.theme-futuristic .fut-card-title .anticon {
+  color: #22d3ee;
+  font-size: 18px;
+}
+.theme-futuristic .fut-card-extra {
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.theme-futuristic .fut-card-body {
+  padding: 20px;
+}
+
+/* 尊重系统"减少动态效果"偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .fut-bokeh {
+    display: none;
+  }
+  .theme-futuristic *,
+  .theme-futuristic *::before,
+  .theme-futuristic *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
