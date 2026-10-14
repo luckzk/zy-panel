@@ -135,10 +135,10 @@ export default function MainLayout() {
           }}
         >
           {collapsed ? (
-            <img src="favicon.svg" alt="zy" style={{ width: 28, height: 28 }} />
+            <img src="/favicon.svg" alt="zy" style={{ width: 28, height: 28 }} />
           ) : (
             <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <img src="favicon.svg" alt="zy-panel" style={{ width: 26, height: 26 }} />
+              <img src="/favicon.svg" alt="zy-panel" style={{ width: 26, height: 26 }} />
               zy-panel
             </span>
           )}

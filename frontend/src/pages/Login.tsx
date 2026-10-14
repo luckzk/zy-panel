@@ -83,7 +83,7 @@ export default function Login() {
     >
       <Card style={{ width: 380 }} bordered={false}>
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <img src="favicon.svg" alt="zy-panel" style={{ width: 52, height: 52, marginBottom: 8 }} />
+          <img src="/favicon.svg" alt="zy-panel" style={{ width: 52, height: 52, marginBottom: 8 }} />
           <Title level={3} style={{ marginBottom: 4 }}>
             zy-panel
           </Title>
