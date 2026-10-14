@@ -62,6 +62,7 @@ def list_instances(
     tenant_id: int = Query(description="租户 ID（必填）"),
     state: str | None = Query(default=None, description="按状态筛选，如 RUNNING"),
     search: str | None = Query(default=None, description="按名称/IP 模糊搜索"),
+    region_id: str | None = Query(default=None, description="阿里云地域 ID（不传则用租户默认地域）"),
     page: int = Query(default=1, ge=1, description="页码"),
     page_size: int = Query(default=50, ge=1, le=200, description="每页条数"),
     _user: models.User = Depends(get_current_user),
@@ -78,7 +79,7 @@ def list_instances(
         # 非 OCI 走 Provider 归一化接口
         try:
             provider = get_provider(tenant)
-            items = [i.to_dict() for i in provider.list_instances()]
+            items = [i.to_dict() for i in provider.list_instances(region_id=region_id)]
         except ProviderError as exc:
             return err(exc.code, exc.message, status=exc.http_status)
         except Exception as exc:

@@ -51,6 +51,7 @@ class AliyunProvider(CloudProvider):
         Capability.SNAPSHOTS,
         Capability.EIP,
         Capability.SPOT,  # 抢占式实例
+        Capability.RAM,  # RAM 子用户管理
     }
 
     # ---------------- 客户端 ----------------
@@ -604,6 +605,103 @@ class AliyunProvider(CloudProvider):
                 out.append((t, round(float(val), 2)))
         out.sort(key=lambda x: x[0])
         return out
+
+    # ---------------- RAM 子用户 ----------------
+    def _ram(self, action: str, params: dict | None = None) -> dict:
+        """RAM 是全局服务，endpoint 为 ram.aliyuncs.com（无地域）。"""
+        client, _ = self._client(self.credentials.get("region_id") or "cn-hangzhou")
+        from aliyunsdkcore.request import CommonRequest
+
+        req = CommonRequest()
+        req.set_domain("ram.aliyuncs.com")
+        req.set_version("2015-05-01")
+        req.set_action_name(action)
+        req.set_method("POST")
+        req.set_protocol_type("https")
+        req.set_accept_format("json")
+        for k, v in (params or {}).items():
+            if v is not None and v != "":
+                req.add_query_param(k, str(v))
+        try:
+            raw = client.do_action_with_exception(req)
+        except Exception as exc:
+            raise ProviderError(3104, f"阿里云 RAM 调用失败 [{action}]：{str(exc)[:200]}", 502)
+        try:
+            import json as _json
+
+            return _json.loads(raw.decode("utf-8", errors="replace"))
+        except ValueError as exc:
+            raise ProviderError(3104, f"阿里云 RAM 返回解析失败 [{action}]：{exc}", 502)
+
+    def list_ram_users(self) -> list[dict]:
+        self.require(Capability.RAM)
+        users: list[dict] = []
+        marker: str | None = None
+        while True:
+            p: dict = {"MaxItems": 100}
+            if marker:
+                p["Marker"] = marker
+            resp = self._ram("ListUsers", p)
+            for u in resp.get("Users", {}).get("User", []):
+                users.append({
+                    "user_name": u.get("UserName", ""),
+                    "display_name": u.get("DisplayName", ""),
+                    "mobile": u.get("MobilePhone", ""),
+                    "email": u.get("Email", ""),
+                    "comments": u.get("Comments", ""),
+                    "create_date": u.get("CreateDate", ""),
+                })
+            if resp.get("IsTruncated"):
+                marker = resp.get("Marker")
+                if not marker:
+                    break
+            else:
+                break
+        return users
+
+    def create_ram_user(self, user_name: str, display_name: str = "",
+                        mobile_phone: str = "", email: str = "", comments: str = "") -> dict:
+        self.require(Capability.RAM)
+        if not user_name or not user_name.strip():
+            raise ProviderError(3400, "用户名不能为空", 400)
+        resp = self._ram("CreateUser", {
+            "UserName": user_name.strip(),
+            "DisplayName": display_name.strip(),
+            "MobilePhone": mobile_phone.strip(),
+            "Email": email.strip(),
+            "Comments": comments.strip(),
+        })
+        u = resp.get("User", {})
+        return {"user_name": u.get("UserName", user_name.strip())}
+
+    def delete_ram_user(self, user_name: str) -> None:
+        self.require(Capability.RAM)
+        # 先删掉该用户的所有 AccessKey，否则删除用户会失败
+        for k in self.list_access_keys(user_name):
+            self.delete_access_key(user_name, k["access_key_id"])
+        self._ram("DeleteUser", {"UserName": user_name})
+
+    def list_access_keys(self, user_name: str) -> list[dict]:
+        self.require(Capability.RAM)
+        resp = self._ram("ListAccessKeys", {"UserName": user_name})
+        return [{
+            "access_key_id": k.get("AccessKeyId", ""),
+            "status": k.get("Status", ""),
+            "create_date": k.get("CreateDate", ""),
+        } for k in resp.get("AccessKeys", {}).get("AccessKey", [])]
+
+    def create_access_key(self, user_name: str) -> dict:
+        self.require(Capability.RAM)
+        resp = self._ram("CreateAccessKey", {"UserName": user_name})
+        k = resp.get("AccessKey", {})
+        return {
+            "access_key_id": k.get("AccessKeyId", ""),
+            "access_key_secret": k.get("AccessKeySecret", ""),  # 仅此一次返回明文
+        }
+
+    def delete_access_key(self, user_name: str, access_key_id: str) -> None:
+        self.require(Capability.RAM)
+        self._ram("DeleteAccessKey", {"UserName": user_name, "UserAccessKeyId": access_key_id})
 
 
 register(AliyunProvider)

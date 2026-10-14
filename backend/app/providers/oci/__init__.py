@@ -69,7 +69,7 @@ class OciProvider(CloudProvider):
             raw=d,
         )
 
-    def list_instances(self) -> list[CloudInstance]:
+    def list_instances(self, region_id: str | None = None) -> list[CloudInstance]:
         self.require(Capability.INSTANCES)
         items = self._call(instance_service.list_instances, self.tenant)
         return [self._to_instance(d) for d in items]

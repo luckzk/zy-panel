@@ -39,6 +39,7 @@ class Capability(str, Enum):
     EIP = "eip"
     SPOT = "spot"  # 抢占式/抢机类能力
     SERIAL_CONSOLE = "serial_console"
+    RAM = "ram"  # 子用户（RAM/IAM）管理
 
 
 class ProviderError(Exception):
@@ -146,7 +147,7 @@ class CloudProvider(ABC):
         """连通性测试，返回 {"ok": True, "detail": ...}，失败抛 ProviderError。"""
         raise NotImplementedError
 
-    def list_instances(self) -> list[CloudInstance]:
+    def list_instances(self, region_id: str | None = None) -> list[CloudInstance]:
         raise NotImplementedError
 
     def get_instance(self, instance_id: str) -> CloudInstance:

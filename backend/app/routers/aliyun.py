@@ -563,3 +563,139 @@ def delete_spot_task(
     db.commit()
     write_log(db, user.id, "aliyun.spot_delete", f"删除抢占式任务 {t.name}")
     return ok({"id": task_id})
+
+
+# ---------------- RAM 子用户 ----------------
+@router.get("/ram/users", summary="RAM 用户列表")
+def list_ram_users(
+    tenant_id: int = Query(description="租户 ID（必填）"),
+    _user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    p, e = _get_aliyun(db, tenant_id)
+    if e:
+        return e
+    try:
+        return ok(p.list_ram_users())
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云 RAM 用户列表异常")
+        return err(3100, f"查询失败：{str(exc)[:200]}", status=500)
+
+
+class RamUserIn(BaseModel):
+    tenant_id: int
+    user_name: str
+    display_name: str = ""
+    mobile_phone: str = ""
+    email: str = ""
+    comments: str = ""
+
+
+@router.post("/ram/users", summary="创建 RAM 用户")
+def create_ram_user(
+    body: RamUserIn,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    p, e = _get_aliyun(db, body.tenant_id)
+    if e:
+        return e
+    try:
+        r = p.create_ram_user(body.user_name, body.display_name,
+                              body.mobile_phone, body.email, body.comments)
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云创建 RAM 用户异常")
+        return err(3100, f"创建失败：{str(exc)[:200]}", status=500)
+    write_log(db, user.id, "aliyun.ram_user_create", f"创建 RAM 用户 {r['user_name']}")
+    return ok(r)
+
+
+@router.delete("/ram/users/{user_name}", summary="删除 RAM 用户（含其 AccessKey）")
+def delete_ram_user(
+    user_name: str,
+    tenant_id: int = Query(description="租户 ID（必填）"),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    p, e = _get_aliyun(db, tenant_id)
+    if e:
+        return e
+    try:
+        p.delete_ram_user(user_name)
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云删除 RAM 用户异常")
+        return err(3100, f"删除失败：{str(exc)[:200]}", status=500)
+    write_log(db, user.id, "aliyun.ram_user_delete", f"删除 RAM 用户 {user_name}")
+    return ok({"user_name": user_name})
+
+
+@router.get("/ram/users/{user_name}/keys", summary="RAM 用户 AccessKey 列表")
+def list_ram_access_keys(
+    user_name: str,
+    tenant_id: int = Query(description="租户 ID（必填）"),
+    _user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    p, e = _get_aliyun(db, tenant_id)
+    if e:
+        return e
+    try:
+        return ok(p.list_access_keys(user_name))
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云 AccessKey 列表异常")
+        return err(3100, f"查询失败：{str(exc)[:200]}", status=500)
+
+
+class RamKeyIn(BaseModel):
+    tenant_id: int
+
+
+@router.post("/ram/users/{user_name}/keys", summary="为 RAM 用户创建 AccessKey（Secret 仅返回一次）")
+def create_ram_access_key(
+    user_name: str,
+    body: RamKeyIn,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    p, e = _get_aliyun(db, body.tenant_id)
+    if e:
+        return e
+    try:
+        r = p.create_access_key(user_name)
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云创建 AccessKey 异常")
+        return err(3100, f"创建失败：{str(exc)[:200]}", status=500)
+    write_log(db, user.id, "aliyun.ram_key_create", f"为 RAM 用户 {user_name} 创建 AccessKey")
+    return ok(r)
+
+
+@router.delete("/ram/users/{user_name}/keys/{key_id}", summary="删除 RAM 用户 AccessKey")
+def delete_ram_access_key(
+    user_name: str,
+    key_id: str,
+    tenant_id: int = Query(description="租户 ID（必填）"),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    p, e = _get_aliyun(db, tenant_id)
+    if e:
+        return e
+    try:
+        p.delete_access_key(user_name, key_id)
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云删除 AccessKey 异常")
+        return err(3100, f"删除失败：{str(exc)[:200]}", status=500)
+    write_log(db, user.id, "aliyun.ram_key_delete", f"删除 RAM 用户 {user_name} 的 AccessKey {key_id}")
+    return ok({"user_name": user_name, "key_id": key_id})
