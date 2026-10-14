@@ -341,26 +341,28 @@ export default function System() {
                       从 GitHub 仓库直接更新：填写仓库地址后，面板会下载指定分支的最新代码并覆盖后端，随后自动重启。公开仓库无需 Token；私有仓库请填写有读取权限的 Token（仅用于下载更新包，加密存储）。
                     </p>
                     <Space direction="vertical" style={{ width: '100%' }} size="middle">
-                      <Space style={{ width: '100%' }} wrap>
+                      <Space style={{ width: '100%' }} wrap={false}>
                         <Input
+                          addonBefore="仓库"
                           placeholder="owner/repo（可粘贴仓库 URL）"
                           value={ghRepo}
                           onChange={(e) => setGhRepo(e.target.value)}
                           style={{ width: 300 }}
                         />
                         <Input
-                          placeholder="分支"
+                          addonBefore="分支"
                           value={ghBranch}
                           onChange={(e) => setGhBranch(e.target.value)}
-                          style={{ width: 140 }}
+                          style={{ width: 150 }}
                         />
                         <Input.Password
-                          placeholder={ghHasToken ? 'Token 已保存（留空不改）' : 'Token（私有仓库必填）'}
+                          addonBefore="Token"
+                          placeholder={ghHasToken ? '已保存，留空不改' : '私有仓库必填'}
                           value={ghToken}
                           onChange={(e) => setGhToken(e.target.value)}
-                          style={{ width: 240 }}
+                          style={{ width: 250 }}
                         />
-                        <Button size="small" onClick={doSaveGhConfig}>保存</Button>
+                        <Button type="primary" size="small" onClick={doSaveGhConfig}>保存配置</Button>
                         {ghHasToken && (
                           <Button size="small" danger onClick={doClearGhToken}>清除 Token</Button>
                         )}
