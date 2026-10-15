@@ -60,6 +60,7 @@ export default function Tenants() {
   const [loading, setLoading] = useState(false);
   const [keyword, setKeyword] = useState('');
   const [regionFilter, setRegionFilter] = useState<string>();
+  const [providerFilter, setProviderFilter] = useState<string>();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<TenantDetail | null>(null);
   const [testState, setTestState] = useState<Record<number, { status: TestState; message?: string }>>({});
@@ -155,10 +156,14 @@ export default function Tenants() {
     () =>
       list.filter(
         (t) =>
-          (!keyword || t.name.includes(keyword) || t.tenancy_ocid.includes(keyword)) &&
-          (!regionFilter || t.region === regionFilter),
+          (!keyword ||
+            t.name.includes(keyword) ||
+            t.tenancy_ocid.includes(keyword) ||
+            (t.access_key_id_masked || '').includes(keyword)) &&
+          (!regionFilter || t.region === regionFilter) &&
+          (!providerFilter || (t.provider || 'oci') === providerFilter),
       ),
-    [list, keyword, regionFilter],
+    [list, keyword, regionFilter, providerFilter],
   );
 
   const openModal = (t?: TenantDetail) => {
@@ -405,7 +410,7 @@ export default function Tenants() {
     >
       <Space style={{ marginBottom: 16 }} wrap>
         <Input
-          placeholder="搜索名称 / Tenancy OCID"
+          placeholder="搜索名称 / 账号标识"
           prefix={<SearchOutlined />}
           allowClear
           style={{ width: 260 }}
@@ -413,13 +418,25 @@ export default function Tenants() {
           onChange={(e) => setKeyword(e.target.value)}
         />
         <Select
-          placeholder="Region 筛选"
+          placeholder="云厂商筛选"
+          allowClear
+          style={{ width: 140 }}
+          value={providerFilter}
+          onChange={setProviderFilter}
+          options={[
+            { value: 'oci', label: 'OCI' },
+            { value: 'aliyun', label: '阿里云' },
+          ]}
+        />
+        <Select
+          placeholder="地域筛选"
           allowClear
           style={{ width: 180 }}
           value={regionFilter}
           onChange={setRegionFilter}
-          options={regionOptions}
-          loading={regionsLoading}
+          options={Array.from(new Set(list.map((t) => t.region).filter(Boolean)))
+            .sort()
+            .map((r) => ({ value: r, label: r }))}
           showSearch
           optionFilterProp="label"
         />
