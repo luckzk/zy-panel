@@ -18,6 +18,7 @@ import {
 import { DownloadOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons';
 import MfaSettings from '../components/MfaSettings';
 import FeUpdateProgress from '../components/FeUpdateProgress';
+import { FRONTEND_VERSION } from '../version';
 import DailyReportCard from '../components/DailyReportCard';
 import {
   applyGithubUpdate,
@@ -267,8 +268,10 @@ export default function System() {
               <Space direction="vertical" size="large" style={{ width: '100%' }}>
                 {version && (
                   <div>
-                    <Text type="secondary">当前版本：</Text>
+                    <Text type="secondary">后端版本：</Text>
                     <Tag color="blue">{version}</Tag>
+                    <Text type="secondary" style={{ marginLeft: 12 }}>前端版本：</Text>
+                    <Tag color="green">zy-panel-frontend v{FRONTEND_VERSION}</Tag>
                   </div>
                 )}
                 <div>
