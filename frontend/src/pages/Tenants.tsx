@@ -492,8 +492,8 @@ export default function Tenants() {
                     >
                       <Input.Password placeholder="请输入 AccessKey Secret" />
                     </Form.Item>
-                    <Form.Item name="aliyun_region" label="地域" rules={[{ required: true }]}>
-                      <Input placeholder="如：cn-hangzhou（国内/国际靠地域区分）" />
+                    <Form.Item name="aliyun_region" label="默认地域" extra="仅作默认展示，实例页可切换任意地域查看">
+                      <Input placeholder="可选，默认 cn-hangzhou" />
                     </Form.Item>
                   </>
                 );
