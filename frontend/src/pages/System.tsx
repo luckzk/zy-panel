@@ -177,6 +177,11 @@ export default function System() {
   };
 
   const doApplyFeUpdate = () => {
+    // 已是最新构建时点也没意义，直接提示
+    if (feCheck && !feCheck.has_update && feCheck.asset_updated_at) {
+      message.info('前端已是最新构建，无需热更');
+      return;
+    }
     Modal.confirm({
       title: '热更前端？',
       content: '将下载 CI 构建的最新前端静态包并替换当前页面文件，无需重启服务，刷新浏览器即生效。',
