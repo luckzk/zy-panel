@@ -53,7 +53,7 @@ class TenantUpdate(BaseModel):
 
 
 def _to_out(t: models.Tenant) -> dict:
-    return {
+    out = {
         "id": t.id,
         "name": t.name,
         "provider": getattr(t, "provider", None) or "oci",
@@ -68,6 +68,16 @@ def _to_out(t: models.Tenant) -> dict:
         "created_at": t.created_at.isoformat() if t.created_at else None,
         "updated_at": t.updated_at.isoformat() if t.updated_at else None,
     }
+    # 阿里云：返回脱敏后的 AccessKey ID 供列表展示（Secret 永不返回）
+    if (getattr(t, "provider", None) or "") == "aliyun" and getattr(t, "credentials_enc", None):
+        try:
+            from ..providers import decrypt_credentials
+
+            ak = (decrypt_credentials(t.credentials_enc) or {}).get("access_key_id", "")
+            out["access_key_id_masked"] = (ak[:4] + "****" + ak[-4:]) if len(ak) > 8 else ("****" if ak else "")
+        except Exception:
+            out["access_key_id_masked"] = ""
+    return out
 
 
 @router.get("/providers", summary="已注册云厂商列表")

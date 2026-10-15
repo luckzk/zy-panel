@@ -47,6 +47,7 @@ interface TenantFormValues {
   access_key_id?: string;
   access_key_secret?: string;
   aliyun_region?: string;
+  access_key_id_masked?: string;
   account_type?: string;
 }
 
@@ -267,23 +268,14 @@ export default function Tenants() {
 
   /** 自动检测账号类型：启发式判断，结果自动写入 */
   const [detecting, setDetecting] = useState<Record<number, boolean>>({});
+  /** 检测结果展示弹窗（声明式 Modal：antd 5.29 + React 19 下静态 Modal.info 不渲染） */
+  const [detectResult, setDetectResult] = useState<{ name: string; label: string; reasons: string[] } | null>(null);
   const doDetect = async (record: TenantDetail) => {
     setDetecting((p) => ({ ...p, [record.id]: true }));
     try {
       const r = await detectAccountType(record.id);
       const label = r.detected === 'free' ? '免费号' : r.detected === 'paid' ? '付费号' : '未知';
-      Modal.info({
-        title: `「${record.name}」检测结果：${label}`,
-        content: (
-          <div>
-            <p style={{ color: '#888' }}>启发式判断，仅供参考。如有误请手动修改。</p>
-            <ul style={{ paddingLeft: 20, margin: 0 }}>
-              {r.reasons.map((x, i) => <li key={i} style={{ fontSize: 13 }}>{x}</li>)}
-            </ul>
-          </div>
-        ),
-        width: 520,
-      });
+      setDetectResult({ name: record.name, label, reasons: r.reasons });
       fetchAll();
     } finally {
       setDetecting((p) => ({ ...p, [record.id]: false }));
@@ -303,35 +295,50 @@ export default function Tenants() {
       },
     },
     {
-      title: 'Region',
+      title: '地域',
       dataIndex: 'region',
       key: 'region',
       width: 140,
       render: (v: string) => <Tag color="blue">{v}</Tag>,
     },
     {
-      title: 'Tenancy OCID',
+      title: '账号标识',
       dataIndex: 'tenancy_ocid',
       key: 'tenancy_ocid',
       width: 200,
-      render: (v: string) => (
-        <Text copyable style={{ maxWidth: 220 }} ellipsis>
-          {v}
-        </Text>
-      ),
+      render: (v: string, r: TenantDetail) =>
+        (r.provider || 'oci') === 'aliyun' ? (
+          <Text copyable style={{ maxWidth: 220 }} ellipsis>
+            {r.access_key_id_masked || '—'}
+          </Text>
+        ) : (
+          <Text copyable style={{ maxWidth: 220 }} ellipsis>
+            {v}
+          </Text>
+        ),
     },
     {
       title: 'User OCID',
       dataIndex: 'user_ocid',
       key: 'user_ocid',
       width: 200,
-      render: (v: string) => (
-        <Text copyable style={{ maxWidth: 220 }} ellipsis>
-          {v}
-        </Text>
-      ),
+      render: (v: string, r: TenantDetail) =>
+        (r.provider || 'oci') === 'aliyun' ? (
+          <Text type="secondary">—</Text>
+        ) : (
+          <Text copyable style={{ maxWidth: 220 }} ellipsis>
+            {v}
+          </Text>
+        ),
     },
-    { title: 'Fingerprint', dataIndex: 'fingerprint', key: 'fingerprint', width: 180, ellipsis: true },
+    {
+      title: 'Fingerprint',
+      dataIndex: 'fingerprint',
+      key: 'fingerprint',
+      width: 180,
+      ellipsis: true,
+      render: (v: string, r: TenantDetail) => ((r.provider || 'oci') === 'aliyun' ? <Text type="secondary">—</Text> : v),
+    },
     {
       title: '账号类型',
       dataIndex: 'account_type',
@@ -542,6 +549,23 @@ export default function Tenants() {
             style={{ fontFamily: 'monospace', fontSize: 12 }}
           />
         </Space>
+      </Modal>
+      <Modal
+        title={detectResult ? `「${detectResult.name}」检测结果：${detectResult.label}` : '检测结果'}
+        open={detectResult !== null}
+        onOk={() => setDetectResult(null)}
+        onCancel={() => setDetectResult(null)}
+        cancelText="关闭"
+        width={520}
+      >
+        {detectResult && (
+          <div>
+            <p style={{ color: '#888' }}>启发式判断，仅供参考。如有误请手动修改。</p>
+            <ul style={{ paddingLeft: 20, margin: 0 }}>
+              {detectResult.reasons.map((x, i) => <li key={i} style={{ fontSize: 13 }}>{x}</li>)}
+            </ul>
+          </div>
+        )}
       </Modal>
       <TenantApiGuide open={guideOpen} onClose={() => setGuideOpen(false)} />
     </Card>

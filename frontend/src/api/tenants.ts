@@ -30,6 +30,7 @@ export interface TenantDetail {
   last_tested_at: string | null;
   created_at: string | null;
   updated_at: string | null;
+  access_key_id_masked?: string; // 阿里云脱敏 AK ID（后端返回）
 }
 
 export interface TenantCreateInput {
