@@ -272,7 +272,7 @@ export default function Instances() {
       ),
     },
     {
-      title: 'OCID',
+      title: '实例 ID',
       dataIndex: 'ocid',
       key: 'ocid',
       render: (v: string) => (
@@ -292,8 +292,8 @@ export default function Instances() {
         return <Tag color={meta.color}>{meta.short}</Tag>;
       },
     },
-    { title: '可用域', dataIndex: 'ad', key: 'ad', width: 160 },
-    { title: 'Shape', dataIndex: 'shape', key: 'shape', width: 170 },
+    { title: '可用区/域', dataIndex: 'ad', key: 'ad', width: 160 },
+    { title: '规格', dataIndex: 'shape', key: 'shape', width: 170 },
     {
       title: '配置',
       key: 'spec',
@@ -345,7 +345,9 @@ export default function Instances() {
             />
           </Tooltip>
           <Tooltip title="改配置（Shape）">
-            <Button type="text" size="small" icon={<SettingOutlined />} onClick={() => openShape(record)} />
+            {(record.provider || 'oci') === 'oci' && (
+              <Button type="text" size="small" icon={<SettingOutlined />} onClick={() => openShape(record)} />
+            )}
           </Tooltip>
           <Popconfirm
             title="确定终止该实例吗？此操作不可恢复！"
