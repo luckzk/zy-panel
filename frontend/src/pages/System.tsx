@@ -73,6 +73,10 @@ export default function System() {
   const [feCheck, setFeCheck] = useState<FrontendUpdateCheck | null>(null);
   const [feChecking, setFeChecking] = useState(false);
   const [feProgressOpen, setFeProgressOpen] = useState(false);
+  const [feConfirmOpen, setFeConfirmOpen] = useState(false);
+  const [ghConfirmOpen, setGhConfirmOpen] = useState(false);
+  const [ghResult, setGhResult] = useState<any>(null);
+  const [uploadResult, setUploadResult] = useState<any>(null);
 
   const loadLogs = async () => {
     try {
@@ -192,49 +196,24 @@ export default function System() {
       message.info('前端已是最新构建，无需热更');
       return;
     }
-    Modal.confirm({
-      title: '热更前端？',
-      content: '将下载 CI 构建的最新前端静态包并替换当前页面文件，无需重启服务，刷新浏览器即生效。',
-      okText: '热更前端',
-      cancelText: '取消',
-      onOk: () => {
-        setFeProgressOpen(true);
-      },
-    });
+    setFeConfirmOpen(true);
   };
 
   const doApplyGhUpdate = () => {
-    Modal.confirm({
-      title: '从 GitHub 更新并重启？',
-      content: '将下载所填分支的最新代码并覆盖后端，3 秒后自动重启服务。前端如有变更需在服务器执行 docker compose up --build -d。',
-      okText: '更新并重启',
-      okType: 'danger',
-      cancelText: '取消',
-      onOk: async () => {
-        setGhApplying(true);
-        try {
-          const r = await applyGithubUpdate();
-          Modal.success({
-            title: `已更新至 ${r.github.sha}`,
-            width: 560,
-            content: (
-              <div>
-                <p>提交信息：{r.github.message || '—'}</p>
-                <p>后端代码：{r.backend_changed ? '已更新' : '无变化'}</p>
-                <p>前端代码：{r.frontend_changed ? '仓库中有变更，可在下方"前端热更新"一键热更' : '无变化'}</p>
-                {r.notes && <p>{r.notes}</p>}
-                <p style={{ color: '#faad14' }}>{r.restart}</p>
-                <Text type="secondary" style={{ fontSize: 12 }}>备份位于：{r.backup_dir}</Text>
-              </div>
-            ),
-          });
-          setGhCheck(null);
-          loadGhConfig();
-        } finally {
-          setGhApplying(false);
-        }
-      },
-    });
+    setGhConfirmOpen(true);
+  };
+
+  const doConfirmGhUpdate = async () => {
+    setGhConfirmOpen(false);
+    setGhApplying(true);
+    try {
+      const r = await applyGithubUpdate();
+      setGhResult(r);
+      setGhCheck(null);
+      loadGhConfig();
+    } finally {
+      setGhApplying(false);
+    }
   };
 
   return (
@@ -331,25 +310,7 @@ export default function System() {
                           setApplying(true);
                           try {
                             const r = await applyUpdate(file);
-                            Modal.success({
-                              title: '更新包已应用',
-                              width: 560,
-                              content: (
-                                <div>
-                                  <p>后端代码：{r.backend_changed ? '已更新' : '无变化'}</p>
-                                  <p>前端代码：{r.frontend_changed ? '有变更，需重新构建' : '无变化'}</p>
-                                  {r.notes && <p>{r.notes}</p>}
-                                  <p style={{ color: '#faad14' }}>{r.restart}</p>
-                                  {r.frontend_changed && (
-                                    <p style={{ color: '#faad14' }}>
-                                      前端 dist 在构建时打包，容器内无法热更：请在服务器执行
-                                      <Text code>docker compose up --build -d</Text> 完成前端更新。
-                                    </p>
-                                  )}
-                                  <Text type="secondary" style={{ fontSize: 12 }}>备份位于：{r.backup_dir}</Text>
-                                </div>
-                              ),
-                            });
+                            setUploadResult(r);
                           } finally {
                             setApplying(false);
                           }
@@ -467,6 +428,74 @@ export default function System() {
                         onClose={() => setFeProgressOpen(false)}
                         onDone={() => setFeCheck(null)}
                       />
+                      <Modal
+                        title="热更前端？"
+                        open={feConfirmOpen}
+                        onOk={() => {
+                          setFeConfirmOpen(false);
+                          setFeProgressOpen(true);
+                        }}
+                        onCancel={() => setFeConfirmOpen(false)}
+                        okText="热更前端"
+                        cancelText="取消"
+                      >
+                        <p>将下载 CI 构建的最新前端静态包并替换当前页面文件，无需重启服务，刷新浏览器即生效。</p>
+                      </Modal>
+                      <Modal
+                        title="从 GitHub 更新并重启？"
+                        open={ghConfirmOpen}
+                        onOk={doConfirmGhUpdate}
+                        onCancel={() => setGhConfirmOpen(false)}
+                        okText="更新并重启"
+                        okType="danger"
+                        cancelText="取消"
+                        confirmLoading={ghApplying}
+                      >
+                        <p>将下载所填分支的最新代码并覆盖后端，3 秒后自动重启服务。前端如有变更需在服务器执行 docker compose up --build -d。</p>
+                      </Modal>
+                      <Modal
+                        title={ghResult ? `已更新至 ${ghResult.github?.sha?.slice(0, 12)}` : '更新结果'}
+                        open={ghResult !== null}
+                        onOk={() => setGhResult(null)}
+                        onCancel={() => setGhResult(null)}
+                        cancelText="关闭"
+                        width={560}
+                      >
+                        {ghResult && (
+                          <div>
+                            <p>提交信息：{ghResult.github?.message || '—'}</p>
+                            <p>后端代码：{ghResult.backend_changed ? '已更新' : '无变化'}</p>
+                            <p>前端代码：{ghResult.frontend_changed ? '仓库中有变更，可在下方"前端热更新"一键热更' : '无变化'}</p>
+                            {ghResult.notes && <p>{ghResult.notes}</p>}
+                            <p style={{ color: '#faad14' }}>{ghResult.restart}</p>
+                            <Text type="secondary" style={{ fontSize: 12 }}>备份位于：{ghResult.backup_dir}</Text>
+                          </div>
+                        )}
+                      </Modal>
+                      <Modal
+                        title="更新包已应用"
+                        open={uploadResult !== null}
+                        onOk={() => setUploadResult(null)}
+                        onCancel={() => setUploadResult(null)}
+                        cancelText="关闭"
+                        width={560}
+                      >
+                        {uploadResult && (
+                          <div>
+                            <p>后端代码：{uploadResult.backend_changed ? '已更新' : '无变化'}</p>
+                            <p>前端代码：{uploadResult.frontend_changed ? '有变更，需重新构建' : '无变化'}</p>
+                            {uploadResult.notes && <p>{uploadResult.notes}</p>}
+                            <p style={{ color: '#faad14' }}>{uploadResult.restart}</p>
+                            {uploadResult.frontend_changed && (
+                              <p style={{ color: '#faad14' }}>
+                                前端 dist 在构建时打包，容器内无法热更：请在服务器执行
+                                <Text code>docker compose up --build -d</Text> 完成前端更新。
+                              </p>
+                            )}
+                            <Text type="secondary" style={{ fontSize: 12 }}>备份位于：{uploadResult.backup_dir}</Text>
+                          </div>
+                        )}
+                      </Modal>
                       {feCheck && (
                         <Alert
                           type={feCheck.has_update ? 'success' : feCheck.asset_updated_at ? 'info' : 'warning'}
