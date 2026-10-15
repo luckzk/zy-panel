@@ -176,9 +176,18 @@ export default function System() {
     }
   };
 
-  const doApplyFeUpdate = () => {
-    // 已是最新构建时点也没意义，直接提示
-    if (feCheck && !feCheck.has_update && feCheck.asset_updated_at) {
+  const doApplyFeUpdate = async () => {
+    // 先确认是否有更新（用户可能没点过"检查"）
+    let check = feCheck;
+    if (!check) {
+      try {
+        check = await checkFrontendUpdate();
+        setFeCheck(check);
+      } catch {
+        return; // 拦截器已提示错误
+      }
+    }
+    if (!check.has_update && check.asset_updated_at) {
       message.info('前端已是最新构建，无需热更');
       return;
     }
