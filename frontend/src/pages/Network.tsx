@@ -11,6 +11,7 @@ import {
   Select,
   Switch,
   Table,
+  Tabs,
   Tag,
   Tooltip,
   Typography,
@@ -20,6 +21,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { listTenants, type TenantOption } from '../api/tenants';
 import { listInstances } from '../api/instances';
 import AliyunEips from '../components/AliyunEips';
+import { getIpMap, refreshIpMap, type IpMapPoint } from '../api/ipinfo';
 import type { Instance } from '../types';
 import {
   cancelChangeIpTask,
@@ -47,7 +49,56 @@ interface ChangeIpForm {
   max_retries: number;
 }
 
-/** 网络 / 换 IP 页：真实接口联调 */
+/** IP 总览：所有租户实例公网 IP + 归属地 */
+function IpOverview() {
+  const [data, setData] = useState<IpMapPoint[]>([]);
+  const [loading, setLoading] = useState(false);
+  const fetch = useCallback(async (force = false) => {
+    setLoading(true);
+    try {
+      setData(force ? await refreshIpMap() : await getIpMap());
+    } catch {
+      setData([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  useEffect(() => { fetch(); }, [fetch]);
+  const columns: ColumnsType<IpMapPoint> = [
+    {
+      title: '公网 IP', dataIndex: 'ip', key: 'ip',
+      render: (v: string) => <Text copyable code>{v}</Text>,
+    },
+    {
+      title: '归属地', key: 'location',
+      render: (_, r) => [r.country, r.city].filter(Boolean).join(' · ') || <Text type="secondary">—</Text>,
+    },
+    { title: '运营商', dataIndex: 'isp', key: 'isp', render: (v: string | null) => v || <Text type="secondary">—</Text> },
+    { title: '实例', dataIndex: 'instance_name', key: 'instance_name' },
+    { title: '租户', dataIndex: 'tenant_name', key: 'tenant_name' },
+  ];
+  return (
+    <Card
+      title="公网 IP 总览"
+      extra={
+        <Button onClick={() => fetch(true)} loading={loading}>
+          刷新归属地
+        </Button>
+      }
+    >
+      <Table<IpMapPoint>
+        rowKey="ip"
+        columns={columns}
+        dataSource={data}
+        loading={loading}
+        pagination={{ showSizeChanger: true, showTotal: (t) => `共 ${t} 个 IP` }}
+        locale={{ emptyText: '暂无公网 IP（实例列表为空或均未分配公网 IP）' }}
+      />
+    </Card>
+  );
+}
+
+/** IP 管理页：IP 总览 / 更换 IP（OCI）/ EIP 管理（阿里云） */
 export default function Network() {
   const [tenants, setTenants] = useState<TenantOption[]>([]);
   const [instances, setInstances] = useState<Instance[]>([]);
@@ -57,7 +108,6 @@ export default function Network() {
   const [submitting, setSubmitting] = useState(false);
   const [form] = Form.useForm<ChangeIpForm>();
   const tenantId = Form.useWatch('tenant_id', form);
-  const tenantProvider = tenants.find((t) => t.id === tenantId)?.provider || 'oci';
   const instanceId = Form.useWatch('instance_id', form);
 
   const tenantName = useCallback(
@@ -259,8 +309,20 @@ export default function Network() {
   ];
 
   return (
-    <div>
-      <Card title="更换公网 IP" style={{ marginBottom: 16 }}>
+    <Tabs
+      defaultActiveKey="overview"
+      items={[
+        {
+          key: 'overview',
+          label: 'IP 总览',
+          children: <IpOverview />,
+        },
+        {
+          key: 'change',
+          label: '更换 IP',
+          children: (
+            <div>
+              <Card title="更换公网 IP" style={{ marginBottom: 16 }}>
         <Form<ChangeIpForm>
           form={form}
           layout="vertical"
@@ -346,9 +408,15 @@ export default function Network() {
           pagination={{ showSizeChanger: true, showTotal: (t) => `共 ${t} 个任务` }}
         />
       </Card>
-      {tenantProvider === 'aliyun' && tenantId !== undefined && (
-        <AliyunEips tenantId={tenantId} />
-      )}
-    </div>
+            </div>
+          ),
+        },
+        {
+          key: 'eip',
+          label: 'EIP 管理',
+          children: <AliyunEips />,
+        },
+      ]}
+    />
   );
 }
