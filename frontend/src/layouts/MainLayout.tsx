@@ -29,29 +29,36 @@ import { useThemeStore } from '../stores/theme';
 
 const { Header, Sider, Content } = Layout;
 
-/** 侧边栏菜单配置 */
-const MENU_ITEMS: { key: string; label: string; icon: React.ReactNode }[] = [
+/** 侧边栏菜单配置（按云厂商分区） */
+interface MenuEntry { key: string; label: string; icon: React.ReactNode }
+const MENU_COMMON: MenuEntry[] = [
   { key: '/dashboard', label: '总览', icon: <DashboardOutlined /> },
   { key: '/tenants', label: '租户配置', icon: <UserOutlined /> },
   { key: '/iam', label: 'IAM 用户', icon: <TeamOutlined /> },
   { key: '/instances', label: '实例管理', icon: <CloudServerOutlined /> },
-  { key: '/snatch-tasks', label: '抢机任务', icon: <ThunderboltOutlined /> },
-  { key: '/spot-instances', label: '抢占式实例', icon: <ThunderboltOutlined /> },
-  { key: '/aliyun-images', label: '镜像管理', icon: <DatabaseOutlined /> },
   { key: '/scheduled-tasks', label: '定时任务', icon: <CalendarOutlined /> },
   { key: '/network', label: '网络 / 换 IP', icon: <GlobalOutlined /> },
-  { key: '/security', label: '安全组', icon: <SafetyOutlined /> },
   { key: '/volumes', label: '卷管理', icon: <DatabaseOutlined /> },
-  { key: '/databases', label: '数据库', icon: <TableOutlined /> },
-  { key: '/object-storage', label: '对象存储', icon: <FolderOpenOutlined /> },
-  { key: '/monitoring', label: '流量监控', icon: <LineChartOutlined /> },
   { key: '/billing', label: '费用分析', icon: <DollarOutlined /> },
-  { key: '/free-tier', label: '免费额度', icon: <GiftOutlined /> },
   { key: '/dns', label: 'DNS 解析', icon: <ApiOutlined /> },
   { key: '/notifications', label: '通知渠道', icon: <BellOutlined /> },
   { key: '/terminal', label: 'Web 终端', icon: <CodeOutlined /> },
   { key: '/system', label: '系统设置', icon: <SettingOutlined /> },
 ];
+const MENU_OCI: MenuEntry[] = [
+  { key: '/snatch-tasks', label: '抢机任务', icon: <ThunderboltOutlined /> },
+  { key: '/security', label: '安全组', icon: <SafetyOutlined /> },
+  { key: '/databases', label: '数据库', icon: <TableOutlined /> },
+  { key: '/object-storage', label: '对象存储', icon: <FolderOpenOutlined /> },
+  { key: '/monitoring', label: '流量监控', icon: <LineChartOutlined /> },
+  { key: '/free-tier', label: '免费额度', icon: <GiftOutlined /> },
+];
+const MENU_ALIYUN: MenuEntry[] = [
+  { key: '/spot-instances', label: '抢占式实例', icon: <ThunderboltOutlined /> },
+  { key: '/aliyun-images', label: '镜像管理', icon: <DatabaseOutlined /> },
+];
+/** 扁平列表（供选中态与面包屑复用） */
+const MENU_ITEMS: MenuEntry[] = [...MENU_COMMON, ...MENU_OCI, ...MENU_ALIYUN];
 
 /** 面包屑文案映射 */
 const CRUMB_MAP: Record<string, string> = {
@@ -99,11 +106,16 @@ export default function MainLayout() {
     [location.pathname],
   );
 
-  const menuItems: MenuProps['items'] = MENU_ITEMS.map((m) => ({
+  const toItem = (m: MenuEntry) => ({
     key: m.key,
     icon: m.icon,
     label: <Link to={m.key}>{m.label}</Link>,
-  }));
+  });
+  const menuItems: MenuProps['items'] = [
+    ...MENU_COMMON.map(toItem),
+    { type: 'group' as const, label: 'OCI 专区', children: MENU_OCI.map(toItem) },
+    { type: 'group' as const, label: '阿里云专区', children: MENU_ALIYUN.map(toItem) },
+  ];
 
   const userMenu: MenuProps = {
     items: [
