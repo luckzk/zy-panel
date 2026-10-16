@@ -261,3 +261,81 @@ export async function createRamAccessKey(tenantId: number, userName: string): Pr
 export async function deleteRamAccessKey(tenantId: number, userName: string, keyId: string): Promise<void> {
   await api.delete(`/api/v1/aliyun/ram/users/${encodeURIComponent(userName)}/keys/${encodeURIComponent(keyId)}`, { params: { tenant_id: tenantId } });
 }
+
+export interface AliSecurityGroup {
+  id: string;
+  name: string;
+  description: string;
+  region: string;
+}
+
+export interface AliSgRule {
+  direction: string; // ingress / egress
+  protocol: string;
+  port_range: string;
+  cidr: string;
+  policy: string;
+  priority: string | number;
+  description: string;
+}
+
+/** 安全组列表 */
+export async function listAliSecurityGroups(tenantId: number, regionId?: string): Promise<AliSecurityGroup[]> {
+  const resp = await api.get('/api/v1/aliyun/security-groups', { params: { tenant_id: tenantId, region_id: regionId || undefined } });
+  return resp.data as AliSecurityGroup[];
+}
+
+/** 安全组规则列表 */
+export async function listAliSgRules(tenantId: number, sgId: string, regionId?: string): Promise<AliSgRule[]> {
+  const resp = await api.get(`/api/v1/aliyun/security-groups/${encodeURIComponent(sgId)}/rules`, {
+    params: { tenant_id: tenantId, region_id: regionId || undefined },
+  });
+  return resp.data as AliSgRule[];
+}
+
+/** 添加安全组规则 */
+export async function addAliSgRule(
+  tenantId: number,
+  sgId: string,
+  body: { direction: string; protocol: string; port_range: string; cidr: string; description?: string },
+  regionId?: string,
+): Promise<void> {
+  await api.post(`/api/v1/aliyun/security-groups/${encodeURIComponent(sgId)}/rules`, {
+    tenant_id: tenantId,
+    region_id: regionId || undefined,
+    ...body,
+  });
+}
+
+/** 删除安全组规则 */
+export async function deleteAliSgRule(
+  tenantId: number,
+  sgId: string,
+  rule: { direction: string; protocol: string; port_range: string; cidr: string },
+  regionId?: string,
+): Promise<void> {
+  await api.delete(`/api/v1/aliyun/security-groups/${encodeURIComponent(sgId)}/rules`, {
+    params: { tenant_id: tenantId, region_id: regionId || undefined, ...rule },
+  });
+}
+
+/** 创建安全组 */
+export async function createAliSecurityGroup(
+  tenantId: number,
+  body: { name: string; description?: string; vpc_id?: string },
+  regionId?: string,
+): Promise<{ security_group_id: string }> {
+  const resp = await api.post('/api/v1/aliyun/security-groups', {
+    tenant_id: tenantId,
+    region_id: regionId || undefined,
+    ...body,
+  });
+  return resp.data as { security_group_id: string };
+}
+
+/** 删除安全组 */
+export async function deleteAliSecurityGroup(tenantId: number, sgId: string, regionId?: string): Promise<void> {
+  await api.delete(`/api/v1/aliyun/security-groups/${encodeURIComponent(sgId)}`, {
+    params: { tenant_id: tenantId, region_id: regionId || undefined },
+  });
+}

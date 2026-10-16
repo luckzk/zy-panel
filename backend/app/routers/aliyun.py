@@ -699,3 +699,155 @@ def delete_ram_access_key(
         return err(3100, f"删除失败：{str(exc)[:200]}", status=500)
     write_log(db, user.id, "aliyun.ram_key_delete", f"删除 RAM 用户 {user_name} 的 AccessKey {key_id}")
     return ok({"user_name": user_name, "key_id": key_id})
+
+
+# ---------------- 安全组 ----------------
+@router.get("/security-groups", summary="安全组列表")
+def list_security_groups(
+    tenant_id: int = Query(description="租户 ID（必填）"),
+    region_id: str | None = Query(default=None, description="地域，不填用租户默认"),
+    _user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    p, e = _get_aliyun(db, tenant_id)
+    if e:
+        return e
+    try:
+        return ok([g.to_dict() for g in p.list_security_groups(region_id)])
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云安全组列表异常")
+        return err(3100, f"查询失败：{str(exc)[:200]}", status=500)
+
+
+@router.get("/security-groups/{sg_id}/rules", summary="安全组规则列表")
+def list_security_group_rules(
+    sg_id: str,
+    tenant_id: int = Query(description="租户 ID（必填）"),
+    region_id: str | None = Query(default=None, description="地域，不填用租户默认"),
+    _user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    p, e = _get_aliyun(db, tenant_id)
+    if e:
+        return e
+    try:
+        return ok(p.list_security_group_rules(sg_id, region_id))
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云安全组规则列表异常")
+        return err(3100, f"查询失败：{str(exc)[:200]}", status=500)
+
+
+class SgRuleIn(BaseModel):
+    tenant_id: int
+    direction: str = "ingress"  # ingress / egress
+    protocol: str = "tcp"       # tcp / udp / icmp / all
+    port_range: str = ""        # 如 80/80、8000/9000、-1/-1（全部）
+    cidr: str = "0.0.0.0/0"
+    description: str = ""
+    region_id: str | None = None
+
+
+@router.post("/security-groups/{sg_id}/rules", summary="添加安全组规则")
+def authorize_security_group_rule(
+    sg_id: str,
+    body: SgRuleIn,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    p, e = _get_aliyun(db, body.tenant_id)
+    if e:
+        return e
+    try:
+        p.authorize_security_group_rule(
+            sg_id, body.direction, body.protocol, body.port_range,
+            body.cidr, body.description, body.region_id,
+        )
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云添加安全组规则异常")
+        return err(3100, f"添加失败：{str(exc)[:200]}", status=500)
+    write_log(db, user.id, "aliyun.sg_rule_add",
+              f"安全组 {sg_id} 添加{body.direction}规则 {body.protocol} {body.port_range} {body.cidr}")
+    return ok({"security_group_id": sg_id})
+
+
+@router.delete("/security-groups/{sg_id}/rules", summary="删除安全组规则")
+def revoke_security_group_rule(
+    sg_id: str,
+    tenant_id: int = Query(description="租户 ID（必填）"),
+    direction: str = Query(default="ingress"),
+    protocol: str = Query(default="tcp"),
+    port_range: str = Query(description="端口范围，如 80/80"),
+    cidr: str = Query(default="0.0.0.0/0"),
+    region_id: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    p, e = _get_aliyun(db, tenant_id)
+    if e:
+        return e
+    try:
+        p.revoke_security_group_rule(sg_id, direction, protocol, port_range, cidr, region_id)
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云删除安全组规则异常")
+        return err(3100, f"删除失败：{str(exc)[:200]}", status=500)
+    write_log(db, user.id, "aliyun.sg_rule_delete",
+              f"安全组 {sg_id} 删除{direction}规则 {protocol} {port_range} {cidr}")
+    return ok({"security_group_id": sg_id})
+
+
+class SgCreateIn(BaseModel):
+    tenant_id: int
+    name: str
+    description: str = ""
+    vpc_id: str = ""
+    region_id: str | None = None
+
+
+@router.post("/security-groups", summary="创建安全组")
+def create_security_group(
+    body: SgCreateIn,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    p, e = _get_aliyun(db, body.tenant_id)
+    if e:
+        return e
+    try:
+        r = p.create_security_group(body.name, body.description, body.vpc_id, body.region_id)
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云创建安全组异常")
+        return err(3100, f"创建失败：{str(exc)[:200]}", status=500)
+    write_log(db, user.id, "aliyun.sg_create", f"创建安全组 {r.get('security_group_id')}（{body.name}）")
+    return ok(r)
+
+
+@router.delete("/security-groups/{sg_id}", summary="删除安全组")
+def delete_security_group(
+    sg_id: str,
+    tenant_id: int = Query(description="租户 ID（必填）"),
+    region_id: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    p, e = _get_aliyun(db, tenant_id)
+    if e:
+        return e
+    try:
+        p.delete_security_group(sg_id, region_id)
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云删除安全组异常")
+        return err(3100, f"删除失败：{str(exc)[:200]}", status=500)
+    write_log(db, user.id, "aliyun.sg_delete", f"删除安全组 {sg_id}")
+    return ok({"security_group_id": sg_id})

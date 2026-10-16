@@ -38,6 +38,7 @@ const MENU_COMMON: MenuEntry[] = [
   { key: '/instances', label: '实例管理', icon: <CloudServerOutlined /> },
   { key: '/scheduled-tasks', label: '定时任务', icon: <CalendarOutlined /> },
   { key: '/network', label: 'IP 管理', icon: <GlobalOutlined /> },
+  { key: '/security', label: '安全组', icon: <SafetyOutlined /> },
   { key: '/volumes', label: '卷管理', icon: <DatabaseOutlined /> },
   { key: '/billing', label: '费用分析', icon: <DollarOutlined /> },
   { key: '/dns', label: 'DNS 解析', icon: <ApiOutlined /> },
@@ -47,7 +48,6 @@ const MENU_COMMON: MenuEntry[] = [
 ];
 const MENU_OCI: MenuEntry[] = [
   { key: '/snatch-tasks', label: '抢机任务', icon: <ThunderboltOutlined /> },
-  { key: '/security', label: '安全组', icon: <SafetyOutlined /> },
   { key: '/databases', label: '数据库', icon: <TableOutlined /> },
   { key: '/object-storage', label: '对象存储', icon: <FolderOpenOutlined /> },
   { key: '/monitoring', label: '流量监控', icon: <LineChartOutlined /> },

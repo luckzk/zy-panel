@@ -402,7 +402,8 @@ class AliyunProvider(CloudProvider):
         ids = resp.get("InstanceIdSets", {}).get("InstanceIdSet", [])
         return {"instance_ids": ids}
 
-    # ---------------- 安全组 ----------------    def list_security_groups(self, region_id: str | None = None) -> list[CloudSecurityGroup]:
+    # ---------------- 安全组 ----------------
+    def list_security_groups(self, region_id: str | None = None) -> list[CloudSecurityGroup]:
         self.require(Capability.SECURITY_GROUPS)
         region = region_id or self.credentials.get("region_id") or ""
         resp = self._ecs("DescribeSecurityGroups", {"RegionId": region}, region=region)
@@ -417,6 +418,82 @@ class AliyunProvider(CloudProvider):
                 raw=sg,
             ))
         return out
+
+    # ---------------- 安全组规则（对标安全组页） ----------------
+    def list_security_group_rules(self, sg_id: str, region_id: str | None = None) -> list[dict]:
+        self.require(Capability.SECURITY_GROUPS)
+        region = region_id or self.credentials.get("region_id") or ""
+        resp = self._ecs("DescribeSecurityGroupAttribute", {
+            "RegionId": region, "SecurityGroupId": sg_id,
+        }, region=region)
+        out = []
+        for perm in resp.get("Permissions", {}).get("Permission", []):
+            direction = (perm.get("Direction") or "").lower()
+            out.append({
+                "direction": direction,  # ingress / egress
+                "protocol": perm.get("IpProtocol", ""),
+                "port_range": perm.get("PortRange", ""),
+                "cidr": perm.get("SourceCidrIp") or perm.get("DestCidrIp") or "",
+                "policy": perm.get("Policy", ""),
+                "priority": perm.get("Priority", ""),
+                "description": perm.get("Description", ""),
+            })
+        return out
+
+    def authorize_security_group_rule(
+        self, sg_id: str, direction: str, protocol: str, port_range: str,
+        cidr: str, description: str = "", region_id: str | None = None,
+    ) -> None:
+        self.require(Capability.SECURITY_GROUPS)
+        region = region_id or self.credentials.get("region_id") or ""
+        params: dict = {
+            "RegionId": region, "SecurityGroupId": sg_id,
+            "IpProtocol": protocol, "PortRange": port_range,
+            "Policy": "accept", "Priority": 1,
+            "Description": description or "",
+        }
+        if direction == "egress":
+            params["DestCidrIp"] = cidr
+        else:
+            params["SourceCidrIp"] = cidr
+        self._ecs("AuthorizeSecurityGroup", params, region=region)
+
+    def revoke_security_group_rule(
+        self, sg_id: str, direction: str, protocol: str, port_range: str,
+        cidr: str, region_id: str | None = None,
+    ) -> None:
+        self.require(Capability.SECURITY_GROUPS)
+        region = region_id or self.credentials.get("region_id") or ""
+        params: dict = {
+            "RegionId": region, "SecurityGroupId": sg_id,
+            "IpProtocol": protocol, "PortRange": port_range,
+            "Policy": "accept", "Priority": 1,
+        }
+        if direction == "egress":
+            params["DestCidrIp"] = cidr
+        else:
+            params["SourceCidrIp"] = cidr
+        self._ecs("RevokeSecurityGroup", params, region=region)
+
+    def create_security_group(
+        self, name: str, description: str = "", vpc_id: str = "",
+        region_id: str | None = None,
+    ) -> dict:
+        self.require(Capability.SECURITY_GROUPS)
+        region = region_id or self.credentials.get("region_id") or ""
+        params: dict = {
+            "RegionId": region, "SecurityGroupName": name,
+            "Description": description or name,
+        }
+        if vpc_id:
+            params["VpcId"] = vpc_id
+        resp = self._ecs("CreateSecurityGroup", params, region=region)
+        return {"security_group_id": resp.get("SecurityGroupId", "")}
+
+    def delete_security_group(self, sg_id: str, region_id: str | None = None) -> None:
+        self.require(Capability.SECURITY_GROUPS)
+        region = region_id or self.credentials.get("region_id") or ""
+        self._ecs("DeleteSecurityGroup", {"RegionId": region, "SecurityGroupId": sg_id}, region=region)
 
     # ---------------- 磁盘（对标卷管理） ----------------
     def list_volumes(self, region_id: str | None = None) -> list[CloudVolume]:

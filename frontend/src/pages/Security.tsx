@@ -18,6 +18,7 @@ import {
 import { PlusOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { listTenants, type TenantOption } from '../api/tenants';
+import AliyunSecurityGroups from '../components/AliyunSecurityGroups';
 import {
   addSecurityRule,
   deleteSecurityRule,
@@ -48,6 +49,9 @@ export default function Security() {
   const [tenantsLoaded, setTenantsLoaded] = useState(false);
   const [open, setOpen] = useState(false);
   const [form] = Form.useForm<RuleFormValues>();
+  /** 一键放行所有端口的确认弹窗状态（声明式 Modal：antd 5.29 + React 19 下静态 Modal.confirm 不渲染） */
+  const [openAllTarget, setOpenAllTarget] = useState<{ securityListId: string; securityListName: string } | null>(null);
+  const [openAllLoading, setOpenAllLoading] = useState(false);
 
   const fetchVcns = useCallback(async (tid: number, comp: string) => {
     try {
@@ -142,35 +146,26 @@ export default function Security() {
       message.warning('当前 VCN 下没有可用的安全列表');
       return;
     }
-    Modal.confirm({
-      title: '确认放行所有端口？',
-      content: (
-        <div>
-          <p>
-            将向安全列表 <b>{first.securityListName || first.securityListId}</b> 追加{' '}
-            <b>0.0.0.0/0</b> 与 <b>::/0</b> 的全协议入站规则，
-            该实例的所有端口将直接暴露到公网。
-          </p>
-          <p style={{ color: '#faad14' }}>请确认实例系统防火墙已配置好，否则有被扫描入侵的风险。</p>
-        </div>
-      ),
-      okText: '确认放行',
-      cancelText: '取消',
-      okButtonProps: { danger: true },
-      onOk: async () => {
-        try {
-          const res = await openAllPorts(tenantId, first.securityListId);
-          if (res.added.length > 0) {
-            message.success(`已放行所有端口（新增 ${res.added.join('、')}）`);
-          } else {
-            message.info('已处于全放行状态，无需重复操作');
-          }
-          refresh();
-        } catch {
-          /* 错误已由拦截器提示 */
-        }
-      },
-    });
+    setOpenAllTarget({ securityListId: first.securityListId, securityListName: first.securityListName || first.securityListId });
+  };
+
+  const doOpenAllPorts = async () => {
+    if (tenantId === undefined || !openAllTarget) return;
+    setOpenAllLoading(true);
+    try {
+      const res = await openAllPorts(tenantId, openAllTarget.securityListId);
+      if (res.added.length > 0) {
+        message.success(`已放行所有端口（新增 ${res.added.join('、')}）`);
+      } else {
+        message.info('已处于全放行状态，无需重复操作');
+      }
+      setOpenAllTarget(null);
+      refresh();
+    } catch {
+      /* 错误已由拦截器提示 */
+    } finally {
+      setOpenAllLoading(false);
+    }
   };
 
   const onFinish = async (values: RuleFormValues) => {
@@ -237,10 +232,16 @@ export default function Security() {
     },
   ];
 
+  // 阿里云租户走安全组管理界面（OCI 安全列表接口不适用）
+  const currentTenant = tenants.find((t) => t.id === tenantId);
+  if (currentTenant?.provider === 'aliyun') {
+    return <AliyunSecurityGroups />;
+  }
+
   if (tenantsLoaded && tenants.length === 0) {
     return (
       <Card title="安全组规则">
-        <Empty description="还没有租户配置，请先添加 OCI 租户">
+        <Empty description="还没有租户配置，请先添加租户">
           <Link to="/tenants">
             <Button type="primary">去添加租户</Button>
           </Link>
@@ -315,6 +316,24 @@ export default function Security() {
             <Input placeholder="规则用途说明" />
           </Form.Item>
         </Form>
+      </Modal>
+      <Modal
+        title="确认放行所有端口？"
+        open={openAllTarget !== null}
+        onCancel={() => setOpenAllTarget(null)}
+        onOk={doOpenAllPorts}
+        okText="确认放行"
+        cancelText="取消"
+        okButtonProps={{ danger: true }}
+        confirmLoading={openAllLoading}
+      >
+        <div>
+          <p>
+            将向安全列表 <b>{openAllTarget?.securityListName}</b> 追加 <b>0.0.0.0/0</b> 与{' '}
+            <b>::/0</b> 的全协议入站规则，该实例的所有端口将直接暴露到公网。
+          </p>
+          <p style={{ color: '#faad14' }}>请确认实例系统防火墙已配置好，否则有被扫描入侵的风险。</p>
+        </div>
       </Modal>
     </Card>
   );

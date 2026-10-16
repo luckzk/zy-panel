@@ -159,5 +159,5 @@ class CloudProvider(ABC):
     def list_volumes(self) -> list[CloudVolume]:
         raise NotImplementedError
 
-    def list_security_groups(self) -> list[CloudSecurityGroup]:
+    def list_security_groups(self, region_id: str | None = None) -> list[CloudSecurityGroup]:
         raise NotImplementedError
