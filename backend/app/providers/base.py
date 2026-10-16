@@ -40,6 +40,9 @@ class Capability(str, Enum):
     SPOT = "spot"  # 抢占式/抢机类能力
     SERIAL_CONSOLE = "serial_console"
     RAM = "ram"  # 子用户（RAM/IAM）管理
+    VPC = "vpc"  # VPC / 交换机
+    OSS = "oss"  # 对象存储
+    RDS = "rds"  # 关系型数据库
 
 
 class ProviderError(Exception):

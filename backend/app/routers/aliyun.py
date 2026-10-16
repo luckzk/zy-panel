@@ -1,7 +1,7 @@
 """阿里云厂商命名空间路由：磁盘/快照/EIP/监控（归一化之外的厂商能力）。"""
 import logging
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -851,3 +851,410 @@ def delete_security_group(
         return err(3100, f"删除失败：{str(exc)[:200]}", status=500)
     write_log(db, user.id, "aliyun.sg_delete", f"删除安全组 {sg_id}")
     return ok({"security_group_id": sg_id})
+
+
+# ---------------- VPC / 交换机 ----------------
+@router.get("/vpcs", summary="VPC 列表")
+def list_vpcs(
+    tenant_id: int = Query(description="租户 ID（必填）"),
+    region_id: str | None = Query(default=None, description="地域，不填用租户默认"),
+    _user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    p, e = _get_aliyun(db, tenant_id)
+    if e:
+        return e
+    try:
+        return ok(p.list_vpcs(region_id))
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云 VPC 列表异常")
+        return err(3100, f"查询失败：{str(exc)[:200]}", status=500)
+
+
+class VpcCreateIn(BaseModel):
+    tenant_id: int
+    name: str
+    cidr: str
+    description: str = ""
+    region_id: str | None = None
+
+
+@router.post("/vpcs", summary="创建 VPC")
+def create_vpc(
+    body: VpcCreateIn,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    p, e = _get_aliyun(db, body.tenant_id)
+    if e:
+        return e
+    try:
+        r = p.create_vpc(body.name, body.cidr, body.description, body.region_id)
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云创建 VPC 异常")
+        return err(3100, f"创建失败：{str(exc)[:200]}", status=500)
+    write_log(db, user.id, "aliyun.vpc_create", f"创建 VPC {r.get('vpc_id')}（{body.name}）")
+    return ok(r)
+
+
+@router.delete("/vpcs/{vpc_id}", summary="删除 VPC")
+def delete_vpc(
+    vpc_id: str,
+    tenant_id: int = Query(description="租户 ID（必填）"),
+    region_id: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    p, e = _get_aliyun(db, tenant_id)
+    if e:
+        return e
+    try:
+        p.delete_vpc(vpc_id, region_id)
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云删除 VPC 异常")
+        return err(3100, f"删除失败：{str(exc)[:200]}", status=500)
+    write_log(db, user.id, "aliyun.vpc_delete", f"删除 VPC {vpc_id}")
+    return ok({"vpc_id": vpc_id})
+
+
+@router.get("/vswitches", summary="交换机列表")
+def list_vswitches(
+    tenant_id: int = Query(description="租户 ID（必填）"),
+    vpc_id: str = Query(default="", description="按 VPC 过滤，不填查全部"),
+    region_id: str | None = Query(default=None, description="地域，不填用租户默认"),
+    _user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    p, e = _get_aliyun(db, tenant_id)
+    if e:
+        return e
+    try:
+        return ok(p.list_vswitches_full(vpc_id, region_id))
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云交换机列表异常")
+        return err(3100, f"查询失败：{str(exc)[:200]}", status=500)
+
+
+class VSwitchCreateIn(BaseModel):
+    tenant_id: int
+    vpc_id: str
+    zone_id: str
+    cidr: str
+    name: str = ""
+    description: str = ""
+    region_id: str | None = None
+
+
+@router.post("/vswitches", summary="创建交换机")
+def create_vswitch(
+    body: VSwitchCreateIn,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    p, e = _get_aliyun(db, body.tenant_id)
+    if e:
+        return e
+    try:
+        r = p.create_vswitch(
+            body.vpc_id, body.zone_id, body.cidr,
+            body.name, body.description, body.region_id,
+        )
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云创建交换机异常")
+        return err(3100, f"创建失败：{str(exc)[:200]}", status=500)
+    write_log(db, user.id, "aliyun.vswitch_create", f"创建交换机 {r.get('vswitch_id')}（VPC {body.vpc_id}）")
+    return ok(r)
+
+
+@router.delete("/vswitches/{vswitch_id}", summary="删除交换机")
+def delete_vswitch(
+    vswitch_id: str,
+    tenant_id: int = Query(description="租户 ID（必填）"),
+    region_id: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    p, e = _get_aliyun(db, tenant_id)
+    if e:
+        return e
+    try:
+        p.delete_vswitch(vswitch_id, region_id)
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云删除交换机异常")
+        return err(3100, f"删除失败：{str(exc)[:200]}", status=500)
+    write_log(db, user.id, "aliyun.vswitch_delete", f"删除交换机 {vswitch_id}")
+    return ok({"vswitch_id": vswitch_id})
+
+
+# ---------------- OSS 对象存储 ----------------
+# from fastapi import APIRouter, Depends, File, Query, UploadFile
+
+
+@router.get("/oss/buckets", summary="OSS Bucket 列表")
+def list_oss_buckets(
+    tenant_id: int = Query(description="租户 ID（必填）"),
+    _user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    p, e = _get_aliyun(db, tenant_id)
+    if e:
+        return e
+    try:
+        return ok(p.list_buckets())
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云 OSS Bucket 列表异常")
+        return err(3100, f"查询失败：{str(exc)[:200]}", status=500)
+
+
+class OssBucketCreateIn(BaseModel):
+    tenant_id: int
+    bucket_name: str
+    region_id: str | None = None
+
+
+@router.post("/oss/buckets", summary="新建 OSS Bucket")
+def create_oss_bucket(
+    body: OssBucketCreateIn,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    p, e = _get_aliyun(db, body.tenant_id)
+    if e:
+        return e
+    try:
+        r = p.create_bucket(body.bucket_name.strip(), body.region_id)
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云新建 OSS Bucket 异常")
+        return err(3100, f"创建失败：{str(exc)[:200]}", status=500)
+    write_log(db, user.id, "aliyun.oss_bucket_create", f"新建 OSS Bucket {body.bucket_name}")
+    return ok(r)
+
+
+@router.delete("/oss/buckets/{bucket_name}", summary="删除 OSS Bucket（仅空桶可删）")
+def delete_oss_bucket(
+    bucket_name: str,
+    tenant_id: int = Query(description="租户 ID（必填）"),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    p, e = _get_aliyun(db, tenant_id)
+    if e:
+        return e
+    try:
+        p.delete_bucket(bucket_name)
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云删除 OSS Bucket 异常")
+        return err(3100, f"删除失败：{str(exc)[:200]}", status=500)
+    write_log(db, user.id, "aliyun.oss_bucket_delete", f"删除 OSS Bucket {bucket_name}")
+    return ok({"bucket_name": bucket_name})
+
+
+@router.get("/oss/buckets/{bucket_name}/objects", summary="OSS Bucket 文件列表")
+def list_oss_objects(
+    bucket_name: str,
+    tenant_id: int = Query(description="租户 ID（必填）"),
+    prefix: str = Query(default="", description="key 前缀过滤"),
+    max_keys: int = Query(default=100, ge=1, le=1000),
+    _user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    p, e = _get_aliyun(db, tenant_id)
+    if e:
+        return e
+    try:
+        return ok(p.list_objects(bucket_name, prefix=prefix, max_keys=max_keys))
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云 OSS 文件列表异常")
+        return err(3100, f"查询失败：{str(exc)[:200]}", status=500)
+
+
+@router.delete("/oss/buckets/{bucket_name}/objects", summary="删除 OSS 文件")
+def delete_oss_object(
+    bucket_name: str,
+    tenant_id: int = Query(description="租户 ID（必填）"),
+    key: str = Query(description="文件 key"),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    p, e = _get_aliyun(db, tenant_id)
+    if e:
+        return e
+    try:
+        p.delete_object(bucket_name, key)
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云删除 OSS 文件异常")
+        return err(3100, f"删除失败：{str(exc)[:200]}", status=500)
+    write_log(db, user.id, "aliyun.oss_object_delete", f"删除 OSS 文件 {bucket_name}/{key}")
+    return ok({"bucket_name": bucket_name, "key": key})
+
+
+@router.get("/oss/buckets/{bucket_name}/download-url", summary="OSS 文件签名下载 URL")
+def get_oss_download_url(
+    bucket_name: str,
+    tenant_id: int = Query(description="租户 ID（必填）"),
+    key: str = Query(description="文件 key"),
+    expires: int = Query(default=3600, ge=60, le=7 * 24 * 3600, description="有效期（秒）"),
+    _user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    p, e = _get_aliyun(db, tenant_id)
+    if e:
+        return e
+    try:
+        return ok({"url": p.get_object_url(bucket_name, key, expires=expires)})
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云 OSS 签名 URL 异常")
+        return err(3100, f"生成失败：{str(exc)[:200]}", status=500)
+
+
+@router.post("/oss/buckets/{bucket_name}/upload", summary="上传文件到 OSS Bucket")
+async def upload_oss_object(
+    bucket_name: str,
+    tenant_id: int = Query(description="租户 ID（必填）"),
+    file: UploadFile = File(description="上传的文件"),
+    prefix: str = Query(default="", description="key 前缀（目录）"),
+    region_id: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    p, e = _get_aliyun(db, tenant_id)
+    if e:
+        return e
+    filename = (file.filename or "unnamed").strip() or "unnamed"
+    key = f"{prefix.rstrip('/')}/{filename}" if prefix else filename
+    try:
+        data = await file.read()
+        size = len(data)
+        r = p.put_object(bucket_name, key, data, region_id)
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云 OSS 上传异常")
+        return err(3100, f"上传失败：{str(exc)[:200]}", status=500)
+    write_log(db, user.id, "aliyun.oss_object_upload", f"上传 OSS 文件 {bucket_name}/{key}（{size} 字节）")
+    return ok(r)
+
+
+# ---------------- RDS 数据库 ----------------
+@router.get("/rds/instances", summary="RDS 实例列表")
+def list_rds_instances(
+    tenant_id: int = Query(description="租户 ID（必填）"),
+    region_id: str | None = Query(default=None, description="地域，不填用租户默认"),
+    _user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    p, e = _get_aliyun(db, tenant_id)
+    if e:
+        return e
+    try:
+        return ok(p.list_db_instances(region_id))
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云 RDS 实例列表异常")
+        return err(3100, f"查询失败：{str(exc)[:200]}", status=500)
+
+
+@router.get("/rds/instances/{db_id}", summary="RDS 实例详情")
+def describe_rds_instance(
+    db_id: str,
+    tenant_id: int = Query(description="租户 ID（必填）"),
+    region_id: str | None = Query(default=None, description="地域，不填用租户默认"),
+    _user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    p, e = _get_aliyun(db, tenant_id)
+    if e:
+        return e
+    try:
+        return ok(p.describe_db_instance(db_id, region_id))
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云 RDS 实例详情异常")
+        return err(3100, f"查询失败：{str(exc)[:200]}", status=500)
+
+
+@router.get("/rds/instances/{db_id}/databases", summary="RDS 实例数据库列表")
+def list_rds_databases(
+    db_id: str,
+    tenant_id: int = Query(description="租户 ID（必填）"),
+    region_id: str | None = Query(default=None, description="地域，不填用租户默认"),
+    _user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    p, e = _get_aliyun(db, tenant_id)
+    if e:
+        return e
+    try:
+        return ok(p.list_db_databases(db_id, region_id))
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云 RDS 数据库列表异常")
+        return err(3100, f"查询失败：{str(exc)[:200]}", status=500)
+
+
+@router.get("/rds/instances/{db_id}/accounts", summary="RDS 实例账号列表")
+def list_rds_accounts(
+    db_id: str,
+    tenant_id: int = Query(description="租户 ID（必填）"),
+    region_id: str | None = Query(default=None, description="地域，不填用租户默认"),
+    _user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    p, e = _get_aliyun(db, tenant_id)
+    if e:
+        return e
+    try:
+        return ok(p.list_db_accounts(db_id, region_id))
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云 RDS 账号列表异常")
+        return err(3100, f"查询失败：{str(exc)[:200]}", status=500)
+
+
+# ---------------- 流量监控 ----------------
+@router.get("/monitoring/overview", summary="全局流量监控聚合（多实例带宽总览）")
+def monitoring_overview(
+    tenant_id: int = Query(description="租户 ID（必填）"),
+    region_id: str | None = Query(default=None, description="地域，不填用租户默认"),
+    hours: int = Query(default=6, ge=1, le=72, description="回看小时数（1~72）"),
+    _user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    p, e = _get_aliyun(db, tenant_id)
+    if e:
+        return e
+    try:
+        return ok(p.get_all_instances_metrics(hours, region_id))
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云全局流量监控异常")
+        return err(3100, f"查询失败：{str(exc)[:200]}", status=500)

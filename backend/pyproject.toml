@@ -27,6 +27,7 @@ dependencies = [
     "aliyun-python-sdk-ecs>=4.24",
     "aliyun-python-sdk-cms>=7.0",
     "aliyun-python-sdk-bssopenapi>=1.0",
+    "oss2>=2.18",
 ]
 
 [build-system]

@@ -52,6 +52,9 @@ class AliyunProvider(CloudProvider):
         Capability.EIP,
         Capability.SPOT,  # 抢占式实例
         Capability.RAM,  # RAM 子用户管理
+        Capability.VPC,  # VPC / 交换机
+        Capability.OSS,  # 对象存储
+        Capability.RDS,  # RDS 数据库
     }
 
     # ---------------- 客户端 ----------------
@@ -779,6 +782,348 @@ class AliyunProvider(CloudProvider):
     def delete_access_key(self, user_name: str, access_key_id: str) -> None:
         self.require(Capability.RAM)
         self._ram("DeleteAccessKey", {"UserName": user_name, "UserAccessKeyId": access_key_id})
+
+
+    # ---------------- VPC / 交换机 ----------------
+    def list_vpcs(self, region_id: str | None = None) -> list[dict]:
+        self.require(Capability.VPC)
+        region = region_id or self.credentials.get("region_id") or ""
+        resp = self._ecs("DescribeVpcs", {"RegionId": region}, region=region)
+        out = []
+        for v in resp.get("Vpcs", {}).get("Vpc", []):
+            out.append({
+                "id": v.get("VpcId", ""),
+                "name": v.get("VpcName") or v.get("VpcId", ""),
+                "cidr": v.get("CidrBlock", ""),
+                "description": v.get("Description") or "",
+                "status": v.get("Status", ""),
+            })
+        return out
+
+    def create_vpc(
+        self, name: str, cidr: str, description: str = "",
+        region_id: str | None = None,
+    ) -> dict:
+        self.require(Capability.VPC)
+        region = region_id or self.credentials.get("region_id") or ""
+        resp = self._ecs("CreateVpc", {
+            "RegionId": region, "VpcName": name,
+            "CidrBlock": cidr, "Description": description or name,
+        }, region=region)
+        return {"vpc_id": resp.get("VpcId", "")}
+
+    def delete_vpc(self, vpc_id: str, region_id: str | None = None) -> None:
+        self.require(Capability.VPC)
+        region = region_id or self.credentials.get("region_id") or ""
+        self._ecs("DeleteVpc", {"RegionId": region, "VpcId": vpc_id}, region=region)
+
+    def list_vswitches_full(
+        self, vpc_id: str = "", region_id: str | None = None,
+    ) -> list[dict]:
+        """交换机完整列表（支持按 VPC 过滤）；与抢占式表单用的 list_vswitches(zone_id) 区分。"""
+        self.require(Capability.VPC)
+        region = region_id or self.credentials.get("region_id") or ""
+        params: dict = {"RegionId": region}
+        if vpc_id:
+            params["VpcId"] = vpc_id
+        resp = self._ecs("DescribeVSwitches", params, region=region)
+        out = []
+        for sw in resp.get("VSwitches", {}).get("VSwitch", []):
+            out.append({
+                "id": sw.get("VSwitchId", ""),
+                "name": sw.get("VSwitchName") or sw.get("VSwitchId", ""),
+                "cidr": sw.get("CidrBlock", ""),
+                "zone_id": sw.get("ZoneId", ""),
+                "vpc_id": sw.get("VpcId", ""),
+                "status": sw.get("Status", ""),
+            })
+        return out
+
+    def create_vswitch(
+        self, vpc_id: str, zone_id: str, cidr: str, name: str = "",
+        description: str = "", region_id: str | None = None,
+    ) -> dict:
+        self.require(Capability.VPC)
+        region = region_id or self.credentials.get("region_id") or ""
+        params: dict = {
+            "RegionId": region, "VpcId": vpc_id, "ZoneId": zone_id,
+            "CidrBlock": cidr, "Description": description or name,
+        }
+        if name:
+            params["VSwitchName"] = name
+        resp = self._ecs("CreateVSwitch", params, region=region)
+        return {"vswitch_id": resp.get("VSwitchId", "")}
+
+    def delete_vswitch(self, vswitch_id: str, region_id: str | None = None) -> None:
+        self.require(Capability.VPC)
+        region = region_id or self.credentials.get("region_id") or ""
+        self._ecs("DeleteVSwitch", {"RegionId": region, "VSwitchId": vswitch_id}, region=region)
+
+    # ---------------- OSS 对象存储 ----------------
+    def _oss_auth(self, region_id: str | None = None):
+        """返回 (oss2.Auth, endpoint)。OSS endpoint 格式为 oss-{region}.aliyuncs.com。"""
+        import oss2
+        ak = self.credentials.get("access_key_id", "")
+        sk = self.credentials.get("access_key_secret", "")
+        if not ak or not sk:
+            raise ProviderError(3101, "阿里云 AK/SK 未配置", 502)
+        region = region_id or self.credentials.get("region_id") or "cn-hangzhou"
+        return oss2.Auth(ak, sk), f"https://oss-{region}.aliyuncs.com"
+
+    def _oss_bucket(self, bucket_name: str, region_id: str | None = None):
+        """内部 helper：返回 oss2.Bucket 对象。"""
+        import oss2
+        auth, endpoint = self._oss_auth(region_id)
+        return oss2.Bucket(auth, endpoint, bucket_name)
+
+    def list_buckets(self, region_id: str | None = None) -> list[dict]:
+        """列出所有 Bucket（OSS Bucket 是全局的，不分 region，但 endpoint 仍需一个 region）。"""
+        self.require(Capability.OSS)
+        import oss2
+        try:
+            auth, endpoint = self._oss_auth(region_id)
+            result = oss2.Service(auth, endpoint).list_buckets()
+            out = []
+            for b in result.buckets:
+                out.append({
+                    "name": b.name,
+                    "location": b.location or "",
+                    "creation_date": b.creation_date.isoformat() if b.creation_date else "",
+                    "storage_class": b.storage_class or "",
+                })
+            return out
+        except ProviderError:
+            raise
+        except Exception as exc:
+            raise ProviderError(3104, f"OSS 调用失败：{str(exc)[:200]}", 502)
+
+    def list_objects(self, bucket_name: str, prefix: str = "", max_keys: int = 100,
+                     region_id: str | None = None) -> list[dict]:
+        self.require(Capability.OSS)
+        try:
+            bucket = self._oss_bucket(bucket_name, region_id)
+            result = bucket.list_objects(prefix=prefix, max_keys=max(1, min(max_keys, 1000)))
+            out = []
+            for o in result.object_list:
+                out.append({
+                    "key": o.key,
+                    "size": o.size,
+                    "last_modified": o.last_modified.isoformat() if o.last_modified else "",
+                    "etag": (o.etag or "").strip('"'),
+                    # 目录按 key 后缀 "/" 判断
+                    "type": "dir" if o.key.endswith("/") else (o.type or ""),
+                })
+            return out
+        except ProviderError:
+            raise
+        except Exception as exc:
+            raise ProviderError(3104, f"OSS 调用失败：{str(exc)[:200]}", 502)
+
+    def create_bucket(self, bucket_name: str, region_id: str | None = None) -> dict:
+        self.require(Capability.OSS)
+        try:
+            bucket = self._oss_bucket(bucket_name, region_id)
+            bucket.create_bucket()  # 默认私有权限；在 endpoint 所在 region 建桶
+            return {"bucket_name": bucket_name}
+        except ProviderError:
+            raise
+        except Exception as exc:
+            raise ProviderError(3104, f"OSS 调用失败：{str(exc)[:200]}", 502)
+
+    def delete_bucket(self, bucket_name: str, region_id: str | None = None) -> None:
+        """删除 Bucket（仅空桶能删，异常透传为 ProviderError）。"""
+        self.require(Capability.OSS)
+        try:
+            self._oss_bucket(bucket_name, region_id).delete_bucket()
+        except ProviderError:
+            raise
+        except Exception as exc:
+            raise ProviderError(3104, f"OSS 调用失败：{str(exc)[:200]}", 502)
+
+    def delete_object(self, bucket_name: str, key: str, region_id: str | None = None) -> None:
+        self.require(Capability.OSS)
+        try:
+            self._oss_bucket(bucket_name, region_id).delete_object(key)
+        except ProviderError:
+            raise
+        except Exception as exc:
+            raise ProviderError(3104, f"OSS 调用失败：{str(exc)[:200]}", 502)
+
+    def get_object_url(self, bucket_name: str, key: str, expires: int = 3600,
+                       region_id: str | None = None) -> str:
+        """生成带签名的临时 URL，用于前端下载/预览。"""
+        self.require(Capability.OSS)
+        try:
+            bucket = self._oss_bucket(bucket_name, region_id)
+            return bucket.sign_url("GET", key, max(60, min(expires, 7 * 24 * 3600)))
+        except ProviderError:
+            raise
+        except Exception as exc:
+            raise ProviderError(3104, f"OSS 调用失败：{str(exc)[:200]}", 502)
+
+    def put_object(self, bucket_name: str, key: str, data: bytes,
+                   region_id: str | None = None) -> dict:
+        """上传文件内容（data 为 bytes）。"""
+        self.require(Capability.OSS)
+        try:
+            bucket = self._oss_bucket(bucket_name, region_id)
+            result = bucket.put_object(key, data)
+            return {
+                "key": key,
+                "etag": (result.etag or "").strip('"'),
+                "request_id": result.request_id,
+            }
+        except ProviderError:
+            raise
+        except Exception as exc:
+            raise ProviderError(3104, f"OSS 调用失败：{str(exc)[:200]}", 502)
+
+    def _rds(self, action: str, params: dict | None = None, region: str | None = None) -> dict:
+        """RDS API（product=Rds, version=2014-08-15）通用封装。"""
+        client = self._client(region or self.credentials.get("region_id"))
+        p = dict(params or {})
+        if region:
+            p["_region"] = region
+        return self._do(client, action, p, version="2014-08-15", product="Rds")
+
+    # ---------------- RDS 数据库 ----------------
+    def list_db_instances(self, region_id: str | None = None) -> list[dict]:
+        self.require(Capability.RDS)
+        region = region_id or self.credentials.get("region_id") or ""
+        resp = self._rds("DescribeDBInstances", {"RegionId": region}, region=region)
+        out = []
+        for it in resp.get("Items", {}).get("DBInstance", []):
+            out.append({
+                "id": it.get("DBInstanceId", ""),
+                "name": it.get("DBInstanceDescription") or it.get("DBInstanceId", ""),
+                "engine": it.get("Engine", ""),
+                "engine_version": it.get("EngineVersion", ""),
+                "status": it.get("DBInstanceStatus", ""),
+                "instance_class": it.get("DBInstanceClass", ""),
+                "memory": it.get("InstanceMemory"),  # 单位 MB
+                "storage": it.get("DBInstanceStorage"),  # 单位 GB
+                "connection": it.get("ConnectionString", ""),
+                "port": it.get("Port", ""),
+                "region": it.get("RegionId", "") or region,
+                "creation_time": it.get("CreationTime", ""),
+                "pay_type": it.get("PayType", ""),
+            })
+        return out
+
+    def describe_db_instance(self, db_instance_id: str, region_id: str | None = None) -> dict:
+        self.require(Capability.RDS)
+        region = region_id or self.credentials.get("region_id") or ""
+        resp = self._rds("DescribeDBInstanceAttribute", {
+            "RegionId": region, "DBInstanceId": db_instance_id,
+        }, region=region)
+        items = resp.get("Items", {}).get("DBInstanceAttribute", [])
+        if not items:
+            raise ProviderError(3104, f"未找到 RDS 实例：{db_instance_id}", 502)
+        it = items[0]
+        return {
+            "id": it.get("DBInstanceId", ""),
+            "name": it.get("DBInstanceDescription") or it.get("DBInstanceId", ""),
+            "engine": it.get("Engine", ""),
+            "engine_version": it.get("EngineVersion", ""),
+            "status": it.get("DBInstanceStatus", ""),
+            "instance_class": it.get("DBInstanceClass", ""),
+            "memory": it.get("DBInstanceMemory"),  # 单位 MB
+            "storage": it.get("DBInstanceStorage"),  # 单位 GB
+            "connection": it.get("ConnectionString", ""),
+            "port": it.get("Port", ""),
+            "region": it.get("RegionId", "") or region,
+            "creation_time": it.get("CreationTime", ""),
+            "pay_type": it.get("PayType", ""),
+            "zone": it.get("ZoneId", ""),
+            "vpc_id": it.get("VPCId", ""),
+            "vswitch_id": it.get("VSwitchId", ""),
+            "security_group_ids": ",".join(
+                str(s) for s in (it.get("SecurityGroupIds") or {}).get("SecurityGroupId", [])
+            ),
+            "security_ip_list": it.get("SecurityIPList", ""),
+            "max_connections": it.get("MaxConnections"),
+            "max_iops": it.get("MaxIOPS"),
+            "category": it.get("Category", ""),
+            "db_instance_type": it.get("DBInstanceType", ""),
+            "lock_mode": it.get("LockMode", ""),
+            "lock_reason": it.get("LockReason", ""),
+        }
+
+    def list_db_databases(self, db_instance_id: str, region_id: str | None = None) -> list[dict]:
+        self.require(Capability.RDS)
+        region = region_id or self.credentials.get("region_id") or ""
+        resp = self._rds("DescribeDatabases", {
+            "RegionId": region, "DBInstanceId": db_instance_id,
+        }, region=region)
+        out = []
+        for db in resp.get("Databases", {}).get("Database", []):
+            out.append({
+                "name": db.get("DBName", ""),
+                "status": db.get("DBStatus", ""),
+                "description": db.get("DBDescription", ""),
+            })
+        return out
+
+    def list_db_accounts(self, db_instance_id: str, region_id: str | None = None) -> list[dict]:
+        self.require(Capability.RDS)
+        region = region_id or self.credentials.get("region_id") or ""
+        resp = self._rds("DescribeAccounts", {
+            "RegionId": region, "DBInstanceId": db_instance_id,
+        }, region=region)
+        out = []
+        for acc in resp.get("Accounts", {}).get("DBInstanceAccount", []):
+            out.append({
+                "name": acc.get("AccountName", ""),
+                "status": acc.get("AccountStatus", ""),
+                "type": acc.get("AccountType", ""),
+            })
+        return out
+
+    # ---------------- 全局流量监控聚合 ----------------
+    def get_all_instances_metrics(self, hours: int = 6, region_id: str | None = None) -> dict:
+        """聚合该地域所有实例的监控指标：逐台调 CMS，最多前 20 台，单台失败跳过。"""
+        self.require(Capability.MONITORING)
+        hours = max(1, min(hours, 72))
+        instances = self.list_instances(region_id)[:20]
+        per_instance: list[dict] = []
+        total_in = 0.0
+        total_out = 0.0
+        latest_time = ""
+        for inst in instances:
+            try:
+                charts = self.get_instance_metrics(inst.id, hours)
+            except Exception as exc:
+                log.warning("阿里云实例 %s 指标聚合跳过: %s", inst.id, exc)
+                continue
+            per_instance.append({
+                "instance_id": inst.id,
+                "instance_name": inst.name,
+                "metrics": charts,
+            })
+            for c in charts:
+                pts = c.get("points") or []
+                if not pts:
+                    continue
+                last = pts[-1]
+                try:
+                    v = float(last.get("value") or 0)
+                except (TypeError, ValueError):
+                    continue
+                if c.get("metric") == "internet_in":
+                    total_in += v
+                elif c.get("metric") == "internet_out":
+                    total_out += v
+                t = last.get("time") or ""
+                if t > latest_time:
+                    latest_time = t
+        return {
+            "instances": per_instance,
+            "summary": {
+                "total_in_bps": total_in,
+                "total_out_bps": total_out,
+                "time": latest_time,
+            },
+        }
 
 
 register(AliyunProvider)
