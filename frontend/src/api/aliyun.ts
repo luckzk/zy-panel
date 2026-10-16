@@ -339,3 +339,190 @@ export async function deleteAliSecurityGroup(tenantId: number, sgId: string, reg
     params: { tenant_id: tenantId, region_id: regionId || undefined },
   });
 }
+
+/* ---------------- VPC / 交换机 ---------------- */
+export interface AliVpc {
+  id: string;
+  name: string;
+  cidr: string;
+  description: string;
+  status: string;
+}
+
+export interface AliVSwitch {
+  id: string;
+  name: string;
+  cidr: string;
+  zone_id: string;
+  vpc_id: string;
+  status: string;
+}
+
+export async function listAliVpcs(tenantId: number, regionId?: string): Promise<AliVpc[]> {
+  const resp = await api.get('/api/v1/aliyun/vpcs', { params: { tenant_id: tenantId, region_id: regionId || undefined } });
+  return resp.data as AliVpc[];
+}
+
+export async function createAliVpc(tenantId: number, body: { name: string; cidr: string; description?: string }, regionId?: string): Promise<{ vpc_id: string }> {
+  const resp = await api.post('/api/v1/aliyun/vpcs', { tenant_id: tenantId, region_id: regionId || undefined, ...body });
+  return resp.data as { vpc_id: string };
+}
+
+export async function deleteAliVpc(tenantId: number, vpcId: string, regionId?: string): Promise<void> {
+  await api.delete(`/api/v1/aliyun/vpcs/${encodeURIComponent(vpcId)}`, { params: { tenant_id: tenantId, region_id: regionId || undefined } });
+}
+
+export async function listAliVSwitchesFull(tenantId: number, vpcId?: string, regionId?: string): Promise<AliVSwitch[]> {
+  const resp = await api.get('/api/v1/aliyun/vswitches', {
+    params: { tenant_id: tenantId, vpc_id: vpcId || undefined, region_id: regionId || undefined },
+  });
+  return resp.data as AliVSwitch[];
+}
+
+export async function createAliVSwitch(
+  tenantId: number,
+  body: { vpc_id: string; zone_id: string; cidr: string; name?: string; description?: string },
+  regionId?: string,
+): Promise<{ vswitch_id: string }> {
+  const resp = await api.post('/api/v1/aliyun/vswitches', { tenant_id: tenantId, region_id: regionId || undefined, ...body });
+  return resp.data as { vswitch_id: string };
+}
+
+export async function deleteAliVSwitch(tenantId: number, vswitchId: string, regionId?: string): Promise<void> {
+  await api.delete(`/api/v1/aliyun/vswitches/${encodeURIComponent(vswitchId)}`, {
+    params: { tenant_id: tenantId, region_id: regionId || undefined },
+  });
+}
+
+/* ---------------- OSS 对象存储 ---------------- */
+export interface AliOssBucket {
+  name: string;
+  location: string;
+  creation_date: string;
+  storage_class: string;
+}
+
+export interface AliOssObject {
+  key: string;
+  size: number;
+  last_modified: string;
+  etag: string;
+  type: string; // file / dir
+}
+
+export async function listAliOssBuckets(tenantId: number): Promise<AliOssBucket[]> {
+  const resp = await api.get('/api/v1/aliyun/oss/buckets', { params: { tenant_id: tenantId } });
+  return resp.data as AliOssBucket[];
+}
+
+export async function createAliOssBucket(tenantId: number, bucketName: string, regionId?: string): Promise<void> {
+  await api.post('/api/v1/aliyun/oss/buckets', { tenant_id: tenantId, bucket_name: bucketName, region_id: regionId || undefined });
+}
+
+export async function deleteAliOssBucket(tenantId: number, bucketName: string): Promise<void> {
+  await api.delete(`/api/v1/aliyun/oss/buckets/${encodeURIComponent(bucketName)}`, { params: { tenant_id: tenantId } });
+}
+
+export async function listAliOssObjects(tenantId: number, bucketName: string, prefix = ''): Promise<AliOssObject[]> {
+  const resp = await api.get(`/api/v1/aliyun/oss/buckets/${encodeURIComponent(bucketName)}/objects`, {
+    params: { tenant_id: tenantId, prefix },
+  });
+  return resp.data as AliOssObject[];
+}
+
+export async function deleteAliOssObject(tenantId: number, bucketName: string, key: string): Promise<void> {
+  await api.delete(`/api/v1/aliyun/oss/buckets/${encodeURIComponent(bucketName)}/objects`, {
+    params: { tenant_id: tenantId, key },
+  });
+}
+
+export async function getAliOssDownloadUrl(tenantId: number, bucketName: string, key: string): Promise<string> {
+  const resp = await api.get(`/api/v1/aliyun/oss/buckets/${encodeURIComponent(bucketName)}/download-url`, {
+    params: { tenant_id: tenantId, key },
+  });
+  return (resp.data as { url: string }).url;
+}
+
+export async function uploadAliOssObject(tenantId: number, bucketName: string, file: File, prefix = ''): Promise<void> {
+  const form = new FormData();
+  form.append('file', file);
+  await api.post(`/api/v1/aliyun/oss/buckets/${encodeURIComponent(bucketName)}/upload`, form, {
+    params: { tenant_id: tenantId, prefix },
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+}
+
+/* ---------------- RDS 数据库 ---------------- */
+export interface AliRdsInstance {
+  id: string;
+  name: string;
+  engine: string;
+  engine_version: string;
+  status: string;
+  instance_class: string;
+  memory: number;
+  storage: number;
+  connection: string;
+  port: number;
+  region: string;
+  creation_time: string;
+  pay_type: string;
+  [key: string]: unknown;
+}
+
+export interface AliRdsDatabase {
+  name: string;
+  status: string;
+  description: string;
+}
+
+export interface AliRdsAccount {
+  name: string;
+  status: string;
+  type: string;
+}
+
+export async function listAliRdsInstances(tenantId: number, regionId?: string): Promise<AliRdsInstance[]> {
+  const resp = await api.get('/api/v1/aliyun/rds/instances', { params: { tenant_id: tenantId, region_id: regionId || undefined } });
+  return resp.data as AliRdsInstance[];
+}
+
+export async function getAliRdsInstance(tenantId: number, dbId: string, regionId?: string): Promise<AliRdsInstance> {
+  const resp = await api.get(`/api/v1/aliyun/rds/instances/${encodeURIComponent(dbId)}`, {
+    params: { tenant_id: tenantId, region_id: regionId || undefined },
+  });
+  return resp.data as AliRdsInstance;
+}
+
+export async function listAliRdsDatabases(tenantId: number, dbId: string, regionId?: string): Promise<AliRdsDatabase[]> {
+  const resp = await api.get(`/api/v1/aliyun/rds/instances/${encodeURIComponent(dbId)}/databases`, {
+    params: { tenant_id: tenantId, region_id: regionId || undefined },
+  });
+  return resp.data as AliRdsDatabase[];
+}
+
+export async function listAliRdsAccounts(tenantId: number, dbId: string, regionId?: string): Promise<AliRdsAccount[]> {
+  const resp = await api.get(`/api/v1/aliyun/rds/instances/${encodeURIComponent(dbId)}/accounts`, {
+    params: { tenant_id: tenantId, region_id: regionId || undefined },
+  });
+  return resp.data as AliRdsAccount[];
+}
+
+/* ---------------- 流量监控 ---------------- */
+export interface AliInstanceMetrics {
+  instance_id: string;
+  instance_name: string;
+  metrics: { metric: string; title: string; points: { time: string; value: number }[] }[];
+}
+
+export interface AliMonitoringOverview {
+  instances: AliInstanceMetrics[];
+  summary: { total_in_bps: number; total_out_bps: number; time: string };
+}
+
+export async function getAliMonitoringOverview(tenantId: number, regionId?: string, hours = 6): Promise<AliMonitoringOverview> {
+  const resp = await api.get('/api/v1/aliyun/monitoring/overview', {
+    params: { tenant_id: tenantId, region_id: regionId || undefined, hours },
+  });
+  return resp.data as AliMonitoringOverview;
+}

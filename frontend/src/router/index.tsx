@@ -10,6 +10,10 @@ import InstanceDetail from '../pages/InstanceDetail';
 import SnatchTasks from '../pages/SnatchTasks';
 import AliyunSpot from '../pages/AliyunSpot';
 import AliyunImages from '../pages/AliyunImages';
+import AliyunVpc from '../pages/AliyunVpc';
+import AliyunOss from '../pages/AliyunOss';
+import AliyunRds from '../pages/AliyunRds';
+import AliyunMonitoring from '../pages/AliyunMonitoring';
 import Network from '../pages/Network';
 import Security from '../pages/Security';
 import Volumes from '../pages/Volumes';
@@ -54,6 +58,10 @@ export const router = createBrowserRouter([
       { path: 'snatch-tasks', element: <SnatchTasks /> },
       { path: 'spot-instances', element: <AliyunSpot /> },
       { path: 'aliyun-images', element: <AliyunImages /> },
+      { path: 'aliyun-vpc', element: <AliyunVpc /> },
+      { path: 'aliyun-oss', element: <AliyunOss /> },
+      { path: 'aliyun-rds', element: <AliyunRds /> },
+      { path: 'aliyun-monitoring', element: <AliyunMonitoring /> },
       { path: 'network', element: <Network /> },
       { path: 'security', element: <Security /> },
       { path: 'volumes', element: <Volumes /> },

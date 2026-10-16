@@ -7,6 +7,7 @@ import {
   BulbOutlined,
   CalendarOutlined,
   CloudServerOutlined,
+  ClusterOutlined,
   DashboardOutlined,
   DatabaseOutlined,
   DollarOutlined,
@@ -44,7 +45,6 @@ const MENU_COMMON: MenuEntry[] = [
   { key: '/dns', label: 'DNS 解析', icon: <ApiOutlined /> },
   { key: '/notifications', label: '通知渠道', icon: <BellOutlined /> },
   { key: '/terminal', label: 'Web 终端', icon: <CodeOutlined /> },
-  { key: '/system', label: '系统设置', icon: <SettingOutlined /> },
 ];
 const MENU_OCI: MenuEntry[] = [
   { key: '/snatch-tasks', label: '抢机任务', icon: <ThunderboltOutlined /> },
@@ -56,9 +56,17 @@ const MENU_OCI: MenuEntry[] = [
 const MENU_ALIYUN: MenuEntry[] = [
   { key: '/spot-instances', label: '抢占式实例', icon: <ThunderboltOutlined /> },
   { key: '/aliyun-images', label: '镜像管理', icon: <DatabaseOutlined /> },
+  { key: '/aliyun-vpc', label: 'VPC 网络', icon: <ClusterOutlined /> },
+  { key: '/aliyun-oss', label: 'OSS 对象存储', icon: <FolderOpenOutlined /> },
+  { key: '/aliyun-rds', label: 'RDS 数据库', icon: <TableOutlined /> },
+  { key: '/aliyun-monitoring', label: '流量监控', icon: <LineChartOutlined /> },
+];
+/** 系统区：与云资源无关，独立放底部 */
+const MENU_SYSTEM: MenuEntry[] = [
+  { key: '/system', label: '系统设置', icon: <SettingOutlined /> },
 ];
 /** 扁平列表（供选中态与面包屑复用） */
-const MENU_ITEMS: MenuEntry[] = [...MENU_COMMON, ...MENU_OCI, ...MENU_ALIYUN];
+const MENU_ITEMS: MenuEntry[] = [...MENU_COMMON, ...MENU_OCI, ...MENU_ALIYUN, ...MENU_SYSTEM];
 
 /** 面包屑文案映射 */
 const CRUMB_MAP: Record<string, string> = {
@@ -68,6 +76,10 @@ const CRUMB_MAP: Record<string, string> = {
   'snatch-tasks': '抢机任务',
   'spot-instances': '抢占式实例',
   'aliyun-images': '镜像管理',
+  'aliyun-vpc': 'VPC 网络',
+  'aliyun-oss': 'OSS 对象存储',
+  'aliyun-rds': 'RDS 数据库',
+  'aliyun-monitoring': '流量监控',
   'scheduled-tasks': '定时任务',
   network: 'IP 管理',
   security: '安全组',
@@ -115,6 +127,7 @@ export default function MainLayout() {
     ...MENU_COMMON.map(toItem),
     { type: 'group' as const, label: 'OCI 专区', children: MENU_OCI.map(toItem) },
     { type: 'group' as const, label: '阿里云专区', children: MENU_ALIYUN.map(toItem) },
+    { type: 'group' as const, label: '系统', children: MENU_SYSTEM.map(toItem) },
   ];
 
   const userMenu: MenuProps = {
