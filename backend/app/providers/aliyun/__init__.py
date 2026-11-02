@@ -376,6 +376,32 @@ class AliyunProvider(CloudProvider):
             })
         return out
 
+    def create_instance(self, spec: dict) -> dict:
+        """创建按量付费实例（与抢占式同 RunInstances，去掉 SpotStrategy）。"""
+        self.require(Capability.INSTANCES)
+        region = spec.get("region_id") or self.credentials.get("region_id") or ""
+        params: dict = {
+            "RegionId": spec["region_id"],
+            "ZoneId": spec.get("zone_id", ""),
+            "ImageId": spec["image_id"],
+            "InstanceType": spec["instance_type"],
+            "VSwitchId": spec["vswitch_id"],
+            "SecurityGroupId": spec["security_group_id"],
+            "InstanceChargeType": "PostPaid",
+            "InstanceName": spec.get("instance_name", "panel-instance"),
+            "SystemDisk.Category": spec.get("system_disk_category", "cloud_essd"),
+            "SystemDisk.Size": spec.get("system_disk_size", 40),
+            "InternetMaxBandwidthOut": spec.get("bandwidth_out", 5),
+            "InternetChargeType": spec.get("internet_charge_type", "PayByTraffic"),
+            "Password": spec.get("password", ""),
+            "MinAmount": 1,
+            "MaxAmount": 1,
+        }
+        params = {k: v for k, v in params.items() if v != "" and v is not None}
+        resp = self._ecs("RunInstances", params, region=region)
+        ids = resp.get("InstanceIdSets", {}).get("InstanceIdSet", [])
+        return {"instance_ids": ids}
+
     def run_spot_instance(self, spec: dict) -> dict:
         """创建抢占式实例（单次尝试）。spec 字段见抢占式任务模型。"""
         self.require(Capability.SPOT)
