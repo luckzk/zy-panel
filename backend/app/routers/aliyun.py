@@ -1258,3 +1258,41 @@ def monitoring_overview(
     except Exception as exc:
         log.exception("阿里云全局流量监控异常")
         return err(3100, f"查询失败：{str(exc)[:200]}", status=500)
+
+
+# ---------------- 新建实例（按量付费） ----------------
+class AliInstanceCreateIn(BaseModel):
+    tenant_id: int
+    region_id: str
+    zone_id: str = ""
+    image_id: str
+    instance_type: str
+    vswitch_id: str
+    security_group_id: str
+    instance_name: str = "panel-instance"
+    system_disk_category: str = "cloud_essd"
+    system_disk_size: int = 40
+    bandwidth_out: int = 5
+    internet_charge_type: str = "PayByTraffic"
+    password: str = ""
+
+
+@router.post("/instances", summary="新建按量付费实例")
+def create_ali_instance(
+    body: AliInstanceCreateIn,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    p, e = _get_aliyun(db, body.tenant_id)
+    if e:
+        return e
+    try:
+        r = p.create_instance(body.model_dump())
+    except ProviderError as exc:
+        return _handle(exc)
+    except Exception as exc:
+        log.exception("阿里云新建实例异常")
+        return err(3100, f"创建失败：{str(exc)[:200]}", status=500)
+    write_log(db, user.id, "aliyun.instance_create",
+              f"新建按量付费实例 {r.get('instance_ids')}（{body.instance_type}，{body.region_id}）")
+    return ok(r)

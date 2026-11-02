@@ -526,3 +526,24 @@ export async function getAliMonitoringOverview(tenantId: number, regionId?: stri
   });
   return resp.data as AliMonitoringOverview;
 }
+
+/* ---------------- 新建实例（按量付费） ---------------- */
+export interface AliInstanceCreateInput {
+  region_id: string;
+  zone_id?: string;
+  image_id: string;
+  instance_type: string;
+  vswitch_id: string;
+  security_group_id: string;
+  instance_name?: string;
+  system_disk_category?: string;
+  system_disk_size?: number;
+  bandwidth_out?: number;
+  internet_charge_type?: string;
+  password?: string;
+}
+
+export async function createAliInstance(tenantId: number, body: AliInstanceCreateInput): Promise<{ instance_ids: string[] }> {
+  const resp = await api.post('/api/v1/aliyun/instances', { tenant_id: tenantId, ...body });
+  return resp.data as { instance_ids: string[] };
+}

@@ -41,6 +41,13 @@ import {
   terminateInstance,
   type PowerOp,
 } from '../api/instances';
+import {
+  createAliInstance,
+  listAliInstanceTypes,
+  listAliPublicImages,
+  listAliSecurityGroups,
+  listAliVSwitches,
+} from '../api/aliyun';
 
 const { Text } = Typography;
 
@@ -78,6 +85,16 @@ export default function Instances() {
   const [regionLoading, setRegionLoading] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([]);
   const [opLoading, setOpLoading] = useState(false);
+  // 阿里云新建实例（按量付费）
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createLoading, setCreateLoading] = useState(false);
+  const [createForm] = Form.useForm();
+  const [createZones, setCreateZones] = useState<{ value: string; label: string }[]>([]);
+  const [createTypes, setCreateTypes] = useState<{ value: string; label: string }[]>([]);
+  const [createImages, setCreateImages] = useState<{ value: string; label: string }[]>([]);
+  const [createVswitches, setCreateVswitches] = useState<{ value: string; label: string }[]>([]);
+  const [createSgs, setCreateSgs] = useState<{ value: string; label: string }[]>([]);
+  const isAliyunTenant = tenants.find((t) => t.id === tenantId)?.provider === 'aliyun';
   const navigate = useNavigate();
 
   /** 打开详情（整页） */
@@ -261,6 +278,69 @@ export default function Instances() {
     }
   };
 
+  /** 打开新建实例弹窗：拉取级联数据 */
+  const openCreate = async () => {
+    if (tenantId === undefined || !isAliyunTenant) return;
+    createForm.resetFields();
+    const region = regionId || tenants.find((t) => t.id === tenantId)?.region || '';
+    createForm.setFieldsValue({
+      region_id: region, system_disk_category: 'cloud_essd', system_disk_size: 40, bandwidth_out: 5,
+    });
+    try {
+      const [types, imgs, vsws, sgs] = await Promise.all([
+        listAliInstanceTypes(tenantId),
+        listAliPublicImages(tenantId),
+        listAliVSwitches(tenantId),
+        listAliSecurityGroups(tenantId, region || undefined),
+      ]);
+      setCreateZones([...new Set(vsws.map((v) => v.zone_id).filter(Boolean))].map((z) => ({ value: z, label: z })));
+      setCreateTypes(types.slice(0, 300).map((t) => ({ value: t.id, label: `${t.id}（${t.cpu}C/${t.memory_gb}G）` })));
+      setCreateImages(imgs.map((i) => ({ value: i.id, label: `${i.name.slice(0, 45)} [${i.architecture}]` })));
+      setCreateVswitches(vsws.map((v) => ({ value: v.id, label: `${v.name}（${v.zone_id}）` })));
+      setCreateSgs(sgs.map((g) => ({ value: g.id, label: `${g.name}（${g.id}）` })));
+    } catch {
+      message.error('拉取基础数据失败');
+      return;
+    }
+    setCreateOpen(true);
+  };
+
+  const onCreateZoneChange = async (zoneId: string) => {
+    if (tenantId === undefined) return;
+    createForm.setFieldsValue({ vswitch_id: undefined });
+    try {
+      const vsws = await listAliVSwitches(tenantId, zoneId);
+      setCreateVswitches(vsws.map((v) => ({ value: v.id, label: `${v.name}（${v.cidr}）` })));
+    } catch { /* 忽略 */ }
+  };
+
+  /** 新建实例提交 */
+  const submitCreate = async () => {
+    if (tenantId === undefined) return;
+    try {
+      const v = await createForm.validateFields();
+      setCreateLoading(true);
+      const r = await createAliInstance(tenantId, {
+        region_id: v.region_id,
+        zone_id: v.zone_id || '',
+        image_id: v.image_id,
+        instance_type: v.instance_type,
+        vswitch_id: v.vswitch_id,
+        security_group_id: v.security_group_id,
+        instance_name: v.instance_name || 'panel-instance',
+        system_disk_category: v.system_disk_category || 'cloud_essd',
+        system_disk_size: Number(v.system_disk_size || 40),
+        bandwidth_out: Number(v.bandwidth_out || 5),
+        password: v.password,
+      });
+      message.success(`实例已创建：${r.instance_ids.join('、')}`);
+      setCreateOpen(false);
+      refresh();
+    } finally {
+      setCreateLoading(false);
+    }
+  };
+
   const columns: ColumnsType<Instance> = [
     {
       title: '实例名称',
@@ -379,9 +459,16 @@ export default function Instances() {
     <Card
       title="实例管理"
       extra={
-        <Button onClick={refresh} loading={loading}>
-          刷新
-        </Button>
+        <Space>
+          {isAliyunTenant && (
+            <Button type="primary" onClick={openCreate}>
+              新建实例
+            </Button>
+          )}
+          <Button onClick={refresh} loading={loading}>
+            刷新
+          </Button>
+        </Space>
       }
     >
       <Space style={{ marginBottom: 16 }} wrap>
@@ -498,6 +585,84 @@ export default function Instances() {
               </Form.Item>
             </>
           )}
+        </Form>
+      </Modal>
+
+      {/* 阿里云新建实例弹窗（按量付费） */}
+      <Modal
+        title="新建实例（按量付费）"
+        open={createOpen}
+        onCancel={() => setCreateOpen(false)}
+        onOk={submitCreate}
+        confirmLoading={createLoading}
+        destroyOnClose
+        width={640}
+      >
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message="按量付费实例将产生费用"
+          description="创建后按实际使用时长计费，不用时请及时释放或关机。"
+        />
+        <Form form={createForm} layout="vertical" preserve={false}>
+          <Form.Item label="地域" name="region_id" rules={[{ required: true }]}>
+            <Select
+              options={regionOptions.map((r) => ({ value: r.id, label: r.name ? `${r.name}（${r.id}）` : r.id }))}
+              showSearch
+              optionFilterProp="label"
+            />
+          </Form.Item>
+          <Space style={{ display: 'flex' }}>
+            <Form.Item label="可用区" name="zone_id" style={{ flex: 1 }}>
+              <Select options={createZones} onChange={onCreateZoneChange} allowClear placeholder="不选则自动分配" />
+            </Form.Item>
+            <Form.Item label="实例规格" name="instance_type" rules={[{ required: true }]} style={{ flex: 2 }}>
+              <Select options={createTypes} showSearch optionFilterProp="label" placeholder="如 ecs.g8i.large" />
+            </Form.Item>
+          </Space>
+          <Form.Item label="镜像" name="image_id" rules={[{ required: true }]}>
+            <Select options={createImages} showSearch optionFilterProp="label" placeholder="选择系统镜像" />
+          </Form.Item>
+          <Space style={{ display: 'flex' }}>
+            <Form.Item label="交换机" name="vswitch_id" rules={[{ required: true }]} style={{ flex: 1 }}>
+              <Select options={createVswitches} showSearch optionFilterProp="label" placeholder="选择交换机" />
+            </Form.Item>
+            <Form.Item label="安全组" name="security_group_id" rules={[{ required: true }]} style={{ flex: 1 }}>
+              <Select options={createSgs} showSearch optionFilterProp="label" placeholder="选择安全组" />
+            </Form.Item>
+          </Space>
+          <Space style={{ display: 'flex' }}>
+            <Form.Item label="系统盘类型" name="system_disk_category" style={{ flex: 1 }}>
+              <Select
+                options={[
+                  { value: 'cloud_essd', label: 'ESSD 云盘' },
+                  { value: 'cloud_ssd', label: 'SSD 云盘' },
+                  { value: 'cloud_efficiency', label: '高效云盘' },
+                ]}
+              />
+            </Form.Item>
+            <Form.Item label="系统盘大小(GB)" name="system_disk_size" style={{ flex: 1 }}>
+              <InputNumber min={20} max={500} style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item label="公网带宽(Mbps)" name="bandwidth_out" style={{ flex: 1 }}>
+              <InputNumber min={0} max={100} style={{ width: '100%' }} />
+            </Form.Item>
+          </Space>
+          <Space style={{ display: 'flex' }}>
+            <Form.Item label="实例名称" name="instance_name" style={{ flex: 1 }}>
+              <Input placeholder="默认 panel-instance" maxLength={128} />
+            </Form.Item>
+            <Form.Item
+              label="登录密码"
+              name="password"
+              rules={[{ required: true, message: '请输入登录密码' }]}
+              style={{ flex: 1 }}
+              extra="8-30 位，须含大写/小写/数字/特殊字符中至少 3 种"
+            >
+              <Input.Password placeholder="实例 root 登录密码" autoComplete="new-password" />
+            </Form.Item>
+          </Space>
         </Form>
       </Modal>
     </Card>
