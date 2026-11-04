@@ -88,6 +88,7 @@ export default function Instances() {
   // 阿里云新建实例（按量付费）
   const [createOpen, setCreateOpen] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
+  const [createDataLoading, setCreateDataLoading] = useState(false);
   const [createForm] = Form.useForm();
   const [createZones, setCreateZones] = useState<{ value: string; label: string }[]>([]);
   const [createTypes, setCreateTypes] = useState<{ value: string; label: string }[]>([]);
@@ -278,31 +279,31 @@ export default function Instances() {
     }
   };
 
-  /** 打开新建实例弹窗：拉取级联数据 */
-  const openCreate = async () => {
+  /** 打开新建实例弹窗：先开弹窗，级联数据后台加载（避免等 4 个接口才出弹窗） */
+  const openCreate = () => {
     if (tenantId === undefined || !isAliyunTenant) return;
     createForm.resetFields();
     const region = regionId || tenants.find((t) => t.id === tenantId)?.region || '';
     createForm.setFieldsValue({
       region_id: region, system_disk_category: 'cloud_essd', system_disk_size: 40, bandwidth_out: 5,
     });
-    try {
-      const [types, imgs, vsws, sgs] = await Promise.all([
-        listAliInstanceTypes(tenantId),
-        listAliPublicImages(tenantId),
-        listAliVSwitches(tenantId),
-        listAliSecurityGroups(tenantId, region || undefined),
-      ]);
-      setCreateZones([...new Set(vsws.map((v) => v.zone_id).filter(Boolean))].map((z) => ({ value: z, label: z })));
-      setCreateTypes(types.slice(0, 300).map((t) => ({ value: t.id, label: `${t.id}（${t.cpu}C/${t.memory_gb}G）` })));
-      setCreateImages(imgs.map((i) => ({ value: i.id, label: `${i.name.slice(0, 45)} [${i.architecture}]` })));
-      setCreateVswitches(vsws.map((v) => ({ value: v.id, label: `${v.name}（${v.zone_id}）` })));
-      setCreateSgs(sgs.map((g) => ({ value: g.id, label: `${g.name}（${g.id}）` })));
-    } catch {
-      message.error('拉取基础数据失败');
-      return;
-    }
     setCreateOpen(true);
+    setCreateDataLoading(true);
+    Promise.all([
+      listAliInstanceTypes(tenantId),
+      listAliPublicImages(tenantId),
+      listAliVSwitches(tenantId),
+      listAliSecurityGroups(tenantId, region || undefined),
+    ])
+      .then(([types, imgs, vsws, sgs]) => {
+        setCreateZones([...new Set(vsws.map((v) => v.zone_id).filter(Boolean))].map((z) => ({ value: z, label: z })));
+        setCreateTypes(types.slice(0, 300).map((t) => ({ value: t.id, label: `${t.id}（${t.cpu}C/${t.memory_gb}G）` })));
+        setCreateImages(imgs.map((i) => ({ value: i.id, label: `${i.name.slice(0, 45)} [${i.architecture}]` })));
+        setCreateVswitches(vsws.map((v) => ({ value: v.id, label: `${v.name}（${v.zone_id}）` })));
+        setCreateSgs(sgs.map((g) => ({ value: g.id, label: `${g.name}（${g.id}）` })));
+      })
+      .catch(() => message.error('拉取基础数据失败'))
+      .finally(() => setCreateDataLoading(false));
   };
 
   const onCreateZoneChange = async (zoneId: string) => {
@@ -618,18 +619,18 @@ export default function Instances() {
               <Select options={createZones} onChange={onCreateZoneChange} allowClear placeholder="不选则自动分配" />
             </Form.Item>
             <Form.Item label="实例规格" name="instance_type" rules={[{ required: true }]} style={{ flex: 2 }}>
-              <Select options={createTypes} showSearch optionFilterProp="label" placeholder="如 ecs.g8i.large" />
+              <Select options={createTypes} loading={createDataLoading} showSearch optionFilterProp="label" placeholder="如 ecs.g8i.large" />
             </Form.Item>
           </Space>
           <Form.Item label="镜像" name="image_id" rules={[{ required: true }]}>
-            <Select options={createImages} showSearch optionFilterProp="label" placeholder="选择系统镜像" />
+            <Select options={createImages} loading={createDataLoading} showSearch optionFilterProp="label" placeholder="选择系统镜像" />
           </Form.Item>
           <Space style={{ display: 'flex' }}>
             <Form.Item label="交换机" name="vswitch_id" rules={[{ required: true }]} style={{ flex: 1 }}>
-              <Select options={createVswitches} showSearch optionFilterProp="label" placeholder="选择交换机" />
+              <Select options={createVswitches} loading={createDataLoading} showSearch optionFilterProp="label" placeholder="选择交换机" />
             </Form.Item>
             <Form.Item label="安全组" name="security_group_id" rules={[{ required: true }]} style={{ flex: 1 }}>
-              <Select options={createSgs} showSearch optionFilterProp="label" placeholder="选择安全组" />
+              <Select options={createSgs} loading={createDataLoading} showSearch optionFilterProp="label" placeholder="选择安全组" />
             </Form.Item>
           </Space>
           <Space style={{ display: 'flex' }}>
