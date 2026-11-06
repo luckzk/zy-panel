@@ -27,6 +27,7 @@ export default function AliyunSpot() {
   const [tasks, setTasks] = useState<AliSpotTask[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [cascadeLoading, setCascadeLoading] = useState(false);
   const [logTask, setLogTask] = useState<AliSpotTask | null>(null);
   const [form] = Form.useForm();
 
@@ -72,11 +73,13 @@ export default function AliyunSpot() {
 
   /** 按地域拉取级联数据（规格/镜像/交换机） */
   const loadCascade = async (tid: number, region: string) => {
-    const [types, imgs, vsws] = await Promise.all([
-      listAliInstanceTypes(tid, '', region),
-      listAliPublicImages(tid, 'linux', region),
-      listAliVSwitches(tid, '', region),
-    ]);
+    setCascadeLoading(true);
+    try {
+      const [types, imgs, vsws] = await Promise.all([
+        listAliInstanceTypes(tid, '', region),
+        listAliPublicImages(tid, 'linux', region),
+        listAliVSwitches(tid, '', region),
+      ]);
     const zs = [...new Set(vsws.map((v) => v.zone_id).filter(Boolean))];
     setZones(zs.map((z) => ({ value: z, label: z })));
     setInstanceTypes(types.slice(0, 300).map((t) => ({
@@ -84,10 +87,13 @@ export default function AliyunSpot() {
     })));
     setImages(imgs.map((i) => ({ value: i.id, label: `${i.name.slice(0, 45)} [${i.architecture}]` })));
     setVswitches(vsws.map((v) => ({ value: v.id, label: `${v.name}（${v.zone_id}）` })));
+    } finally {
+      setCascadeLoading(false);
+    }
   };
 
-  /** 打开新建弹窗：拉取级联数据 */
-  const openModal = async () => {
+  /** 打开新建弹窗：先开弹窗，地域和级联数据后台加载 */
+  const openModal = () => {
     if (tenantId === undefined || !tenant) return;
     form.resetFields();
     form.setFieldsValue({
@@ -95,15 +101,11 @@ export default function AliyunSpot() {
       system_disk_category: 'cloud_essd', system_disk_size: 40,
       bandwidth_out: 5, interval_sec: 60, max_attempts: 0,
     });
-    try {
-      const rs = await listTenantRegions(tenantId);
-      setRegions(rs.map((r) => ({ value: r.id, label: r.name ? `${r.name}（${r.id}）` : r.id })));
-      await loadCascade(tenantId, tenant.region);
-    } catch {
-      message.error('拉取基础数据失败');
-      return;
-    }
     setModalOpen(true);
+    listTenantRegions(tenantId)
+      .then((rs) => setRegions(rs.map((r) => ({ value: r.id, label: r.name ? `${r.name}（${r.id}）` : r.id }))))
+      .catch(() => message.error('地域列表加载失败'));
+    loadCascade(tenantId, tenant.region).catch(() => message.error('拉取基础数据失败'));
   };
 
   /** 切换地域：级联数据按新地域重拉，清空已选的可用区/规格/镜像/交换机 */
@@ -246,22 +248,22 @@ export default function AliyunSpot() {
             <Input placeholder="如：抢占计算型-4C8G" />
           </Form.Item>
           <Form.Item label="地域" name="region_id" rules={[{ required: true }]}>
-            <Select options={regions} showSearch optionFilterProp="label" onChange={onRegionChange} />
+            <Select options={regions} loading={cascadeLoading} showSearch optionFilterProp="label" onChange={onRegionChange} />
           </Form.Item>
           <Space style={{ width: '100%' }} size={12}>
             <Form.Item label="可用区" name="zone_id" style={{ flex: 1 }}>
-              <Select placeholder="可选，不选则由阿里云分配" allowClear options={zones} onChange={onZoneChange} />
+              <Select placeholder="可选，不选则由阿里云分配" allowClear options={zones} loading={cascadeLoading} onChange={onZoneChange} />
             </Form.Item>
             <Form.Item label="实例规格" name="instance_type" rules={[{ required: true }]} style={{ flex: 2 }}>
-              <Select placeholder="选择规格" showSearch optionFilterProp="label" options={instanceTypes} />
+              <Select placeholder="选择规格" showSearch optionFilterProp="label" options={instanceTypes} loading={cascadeLoading} />
             </Form.Item>
           </Space>
           <Form.Item label="镜像" name="image_id" rules={[{ required: true }]}>
-            <Select placeholder="选择公共镜像" showSearch optionFilterProp="label" options={images} />
+            <Select loading={cascadeLoading} placeholder="选择公共镜像" showSearch optionFilterProp="label" options={images} />
           </Form.Item>
           <Space style={{ width: '100%' }} size={12}>
             <Form.Item label="交换机" name="vswitch_id" rules={[{ required: true }]} style={{ flex: 1 }}>
-              <Select placeholder="选择交换机" options={vswitches} />
+              <Select loading={cascadeLoading} placeholder="选择交换机" options={vswitches} />
             </Form.Item>
             <Form.Item
               label="安全组 ID" name="security_group_id" rules={[{ required: true }]}
