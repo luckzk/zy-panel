@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Button, Card, Descriptions, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, message,
 } from 'antd';
@@ -28,6 +28,13 @@ export default function AliyunSpot() {
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [cascadeLoading, setCascadeLoading] = useState(false);
+  // 级联数据缓存：tenant:region -> 已映射的下拉选项，二次打开直接秒出
+  const cascadeCache = useRef<Record<string, {
+    zones: { value: string; label: string }[];
+    types: { value: string; label: string }[];
+    images: { value: string; label: string }[];
+    vswitches: { value: string; label: string }[];
+  }>>({});
   const [logTask, setLogTask] = useState<AliSpotTask | null>(null);
   const [form] = Form.useForm();
 
@@ -71,25 +78,42 @@ export default function AliyunSpot() {
     return () => clearInterval(timer);
   }, [tenantId, tasks, fetchTasks]);
 
-  /** 按地域拉取级联数据（规格/镜像/交换机） */
-  const loadCascade = async (tid: number, region: string) => {
-    setCascadeLoading(true);
-    try {
-      const [types, imgs, vsws] = await Promise.all([
-        listAliInstanceTypes(tid, '', region),
-        listAliPublicImages(tid, 'linux', region),
-        listAliVSwitches(tid, '', region),
-      ]);
-    const zs = [...new Set(vsws.map((v) => v.zone_id).filter(Boolean))];
-    setZones(zs.map((z) => ({ value: z, label: z })));
-    setInstanceTypes(types.slice(0, 300).map((t) => ({
-      value: t.id, label: `${t.id}（${t.cpu}C/${t.memory_gb}G）`,
-    })));
-    setImages(imgs.map((i) => ({ value: i.id, label: `${i.name.slice(0, 45)} [${i.architecture}]` })));
-    setVswitches(vsws.map((v) => ({ value: v.id, label: `${v.name}（${v.zone_id}）` })));
-    } finally {
-      setCascadeLoading(false);
+  /** 按地域拉取级联数据（规格/镜像/交换机）：逐个先回先填 + 缓存 */
+  const loadCascade = (tid: number, region: string) => {
+    const key = `${tid}:${region}`;
+    const cached = cascadeCache.current[key];
+    if (cached) {
+      setZones(cached.zones);
+      setInstanceTypes(cached.types);
+      setImages(cached.images);
+      setVswitches(cached.vswitches);
+      return Promise.resolve();
     }
+    setCascadeLoading(true);
+    const pTypes = listAliInstanceTypes(tid, '', region).then((types) => {
+      const m = types.slice(0, 300).map((t) => ({
+        value: t.id, label: `${t.id}（${t.cpu}C/${t.memory_gb}G）`,
+      }));
+      setInstanceTypes(m);
+      return m;
+    });
+    const pImages = listAliPublicImages(tid, 'linux', region).then((imgs) => {
+      const m = imgs.map((i) => ({ value: i.id, label: `${i.name.slice(0, 45)} [${i.architecture}]` }));
+      setImages(m);
+      return m;
+    });
+    const pVsw = listAliVSwitches(tid, '', region).then((vsws) => {
+      const m = vsws.map((v) => ({ value: v.id, label: `${v.name}（${v.zone_id}）` }));
+      const z = [...new Set(vsws.map((v) => v.zone_id).filter(Boolean))].map((zz) => ({ value: zz, label: zz }));
+      setVswitches(m);
+      setZones(z);
+      return { vswitches: m, zones: z };
+    });
+    return Promise.all([pTypes, pImages, pVsw])
+      .then(([types, images, vsw]) => {
+        cascadeCache.current[key] = { types, images, vswitches: vsw.vswitches, zones: vsw.zones };
+      })
+      .finally(() => setCascadeLoading(false));
   };
 
   /** 打开新建弹窗：先开弹窗，地域和级联数据后台加载 */

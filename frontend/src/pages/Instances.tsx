@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Button,
@@ -89,6 +89,14 @@ export default function Instances() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
   const [createDataLoading, setCreateDataLoading] = useState(false);
+  // 级联数据缓存：tenant:region -> 已映射的下拉选项，二次打开直接秒出
+  const createCascadeCache = useRef<Record<string, {
+    zones: { value: string; label: string }[];
+    types: { value: string; label: string }[];
+    images: { value: string; label: string }[];
+    vswitches: { value: string; label: string }[];
+    sgs: { value: string; label: string }[];
+  }>>({});
   const [createForm] = Form.useForm();
   const [createZones, setCreateZones] = useState<{ value: string; label: string }[]>([]);
   const [createTypes, setCreateTypes] = useState<{ value: string; label: string }[]>([]);
@@ -291,21 +299,44 @@ export default function Instances() {
     loadCreateCascade(tenantId, region);
   };
 
-  /** 按地域拉取新建实例的级联数据 */
+  /** 按地域拉取新建实例的级联数据：逐个先回先填 + 缓存，二次打开秒出 */
   const loadCreateCascade = (tid: number, region: string) => {
+    const key = `${tid}:${region}`;
+    const cached = createCascadeCache.current[key];
+    if (cached) {
+      setCreateZones(cached.zones);
+      setCreateTypes(cached.types);
+      setCreateImages(cached.images);
+      setCreateVswitches(cached.vswitches);
+      setCreateSgs(cached.sgs);
+      return;
+    }
     setCreateDataLoading(true);
-    Promise.all([
-      listAliInstanceTypes(tid, '', region),
-      listAliPublicImages(tid, 'linux', region),
-      listAliVSwitches(tid, '', region),
-      listAliSecurityGroups(tid, region || undefined),
-    ])
-      .then(([types, imgs, vsws, sgs]) => {
-        setCreateZones([...new Set(vsws.map((v) => v.zone_id).filter(Boolean))].map((z) => ({ value: z, label: z })));
-        setCreateTypes(types.slice(0, 300).map((t) => ({ value: t.id, label: `${t.id}（${t.cpu}C/${t.memory_gb}G）` })));
-        setCreateImages(imgs.map((i) => ({ value: i.id, label: `${i.name.slice(0, 45)} [${i.architecture}]` })));
-        setCreateVswitches(vsws.map((v) => ({ value: v.id, label: `${v.name}（${v.zone_id}）` })));
-        setCreateSgs(sgs.map((g) => ({ value: g.id, label: `${g.name}（${g.id}）` })));
+    const pTypes = listAliInstanceTypes(tid, '', region).then((types) => {
+      const m = types.slice(0, 300).map((t) => ({ value: t.id, label: `${t.id}（${t.cpu}C/${t.memory_gb}G）` }));
+      setCreateTypes(m);
+      return m;
+    });
+    const pImages = listAliPublicImages(tid, 'linux', region).then((imgs) => {
+      const m = imgs.map((i) => ({ value: i.id, label: `${i.name.slice(0, 45)} [${i.architecture}]` }));
+      setCreateImages(m);
+      return m;
+    });
+    const pVsw = listAliVSwitches(tid, '', region).then((vsws) => {
+      const m = vsws.map((v) => ({ value: v.id, label: `${v.name}（${v.zone_id}）` }));
+      const z = [...new Set(vsws.map((v) => v.zone_id).filter(Boolean))].map((zz) => ({ value: zz, label: zz }));
+      setCreateVswitches(m);
+      setCreateZones(z);
+      return { vswitches: m, zones: z };
+    });
+    const pSgs = listAliSecurityGroups(tid, region || undefined).then((sgs) => {
+      const m = sgs.map((g) => ({ value: g.id, label: `${g.name}（${g.id}）` }));
+      setCreateSgs(m);
+      return m;
+    });
+    Promise.all([pTypes, pImages, pVsw, pSgs])
+      .then(([types, images, vsw, sgs]) => {
+        createCascadeCache.current[key] = { types, images, vswitches: vsw.vswitches, zones: vsw.zones, sgs };
       })
       .catch(() => message.error('拉取基础数据失败'))
       .finally(() => setCreateDataLoading(false));
