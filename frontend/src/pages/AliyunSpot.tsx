@@ -3,7 +3,7 @@ import {
   Button, Card, Descriptions, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, message,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { listTenants, type TenantOption } from '../api/tenants';
+import { listTenants, listTenantRegions, type TenantOption } from '../api/tenants';
 import {
   createAliSpotTask, deleteAliSpotTask, listAliInstanceTypes, listAliPublicImages,
   listAliSpotTasks, listAliVSwitches, pauseAliSpotTask, startAliSpotTask,
@@ -31,6 +31,7 @@ export default function AliyunSpot() {
   const [form] = Form.useForm();
 
   // 表单级联数据
+  const [regions, setRegions] = useState<{ value: string; label: string }[]>([]);
   const [zones, setZones] = useState<{ value: string; label: string }[]>([]);
   const [instanceTypes, setInstanceTypes] = useState<{ value: string; label: string }[]>([]);
   const [images, setImages] = useState<{ value: string; label: string }[]>([]);
@@ -69,6 +70,22 @@ export default function AliyunSpot() {
     return () => clearInterval(timer);
   }, [tenantId, tasks, fetchTasks]);
 
+  /** 按地域拉取级联数据（规格/镜像/交换机） */
+  const loadCascade = async (tid: number, region: string) => {
+    const [types, imgs, vsws] = await Promise.all([
+      listAliInstanceTypes(tid, '', region),
+      listAliPublicImages(tid, 'linux', region),
+      listAliVSwitches(tid, '', region),
+    ]);
+    const zs = [...new Set(vsws.map((v) => v.zone_id).filter(Boolean))];
+    setZones(zs.map((z) => ({ value: z, label: z })));
+    setInstanceTypes(types.slice(0, 300).map((t) => ({
+      value: t.id, label: `${t.id}（${t.cpu}C/${t.memory_gb}G）`,
+    })));
+    setImages(imgs.map((i) => ({ value: i.id, label: `${i.name.slice(0, 45)} [${i.architecture}]` })));
+    setVswitches(vsws.map((v) => ({ value: v.id, label: `${v.name}（${v.zone_id}）` })));
+  };
+
   /** 打开新建弹窗：拉取级联数据 */
   const openModal = async () => {
     if (tenantId === undefined || !tenant) return;
@@ -79,18 +96,9 @@ export default function AliyunSpot() {
       bandwidth_out: 5, interval_sec: 60, max_attempts: 0,
     });
     try {
-      const [types, imgs, vsws] = await Promise.all([
-        listAliInstanceTypes(tenantId),
-        listAliPublicImages(tenantId),
-        listAliVSwitches(tenantId),
-      ]);
-      const zs = [...new Set(vsws.map((v) => v.zone_id).filter(Boolean))];
-      setZones(zs.map((z) => ({ value: z, label: z })));
-      setInstanceTypes(types.slice(0, 300).map((t) => ({
-        value: t.id, label: `${t.id}（${t.cpu}C/${t.memory_gb}G）`,
-      })));
-      setImages(imgs.map((i) => ({ value: i.id, label: `${i.name.slice(0, 45)} [${i.architecture}]` })));
-      setVswitches(vsws.map((v) => ({ value: v.id, label: `${v.name}（${v.zone_id}）` })));
+      const rs = await listTenantRegions(tenantId);
+      setRegions(rs.map((r) => ({ value: r.id, label: r.name ? `${r.name}（${r.id}）` : r.id })));
+      await loadCascade(tenantId, tenant.region);
     } catch {
       message.error('拉取基础数据失败');
       return;
@@ -98,11 +106,22 @@ export default function AliyunSpot() {
     setModalOpen(true);
   };
 
+  /** 切换地域：级联数据按新地域重拉，清空已选的可用区/规格/镜像/交换机 */
+  const onRegionChange = async (region: string) => {
+    if (tenantId === undefined) return;
+    form.setFieldsValue({ zone_id: undefined, instance_type: undefined, image_id: undefined, vswitch_id: undefined });
+    try {
+      await loadCascade(tenantId, region);
+    } catch {
+      message.error('拉取基础数据失败');
+    }
+  };
+
   const onZoneChange = async (zoneId: string) => {
     if (tenantId === undefined) return;
     form.setFieldsValue({ vswitch_id: undefined });
     try {
-      const vsws = await listAliVSwitches(tenantId, zoneId);
+      const vsws = await listAliVSwitches(tenantId, zoneId, form.getFieldValue('region_id'));
       setVswitches(vsws.map((v) => ({ value: v.id, label: `${v.name}（${v.cidr}）` })));
     } catch { /* 忽略 */ }
   };
@@ -227,7 +246,7 @@ export default function AliyunSpot() {
             <Input placeholder="如：抢占计算型-4C8G" />
           </Form.Item>
           <Form.Item label="地域" name="region_id" rules={[{ required: true }]}>
-            <Input disabled />
+            <Select options={regions} showSearch optionFilterProp="label" onChange={onRegionChange} />
           </Form.Item>
           <Space style={{ width: '100%' }} size={12}>
             <Form.Item label="可用区" name="zone_id" style={{ flex: 1 }}>

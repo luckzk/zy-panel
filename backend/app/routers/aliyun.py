@@ -303,6 +303,7 @@ def list_images(
 def list_public_images(
     tenant_id: int = Query(description="租户 ID（必填）"),
     os_type: str = Query(default="linux", description="linux / windows"),
+    region_id: str | None = Query(default=None, description="地域，不填用租户默认"),
     _user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -310,7 +311,7 @@ def list_public_images(
     if e:
         return e
     try:
-        return ok(p.list_public_images(os_type))
+        return ok(p.list_public_images(os_type, region_id))
     except ProviderError as exc:
         return _handle(exc)
     except Exception as exc:
@@ -397,6 +398,7 @@ def billing_summary(
 def list_instance_types(
     tenant_id: int = Query(description="租户 ID（必填）"),
     zone_id: str = Query(default="", description="可用区过滤"),
+    region_id: str | None = Query(default=None, description="地域，不填用租户默认"),
     _user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -404,7 +406,7 @@ def list_instance_types(
     if e:
         return e
     try:
-        return ok(p.list_instance_types(zone_id))
+        return ok(p.list_instance_types(zone_id, region_id))
     except ProviderError as exc:
         return _handle(exc)
     except Exception as exc:
@@ -416,6 +418,7 @@ def list_instance_types(
 def list_vswitches(
     tenant_id: int = Query(description="租户 ID（必填）"),
     zone_id: str = Query(default="", description="可用区过滤"),
+    region_id: str | None = Query(default=None, description="地域，不填用租户默认"),
     _user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -423,7 +426,7 @@ def list_vswitches(
     if e:
         return e
     try:
-        return ok(p.list_vswitches(zone_id))
+        return ok(p.list_vswitches(zone_id, region_id))
     except ProviderError as exc:
         return _handle(exc)
     except Exception as exc:

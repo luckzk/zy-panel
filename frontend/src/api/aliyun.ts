@@ -125,8 +125,8 @@ export async function listAliImages(tenantId: number): Promise<AliImage[]> {
   return (resp.data as AliImage[]) ?? [];
 }
 
-export async function listAliPublicImages(tenantId: number, osType = 'linux'): Promise<AliImage[]> {
-  const resp = await api.get('/api/v1/aliyun/images/public', { params: { tenant_id: tenantId, os_type: osType } });
+export async function listAliPublicImages(tenantId: number, osType = 'linux', regionId?: string): Promise<AliImage[]> {
+  const resp = await api.get('/api/v1/aliyun/images/public', { params: { tenant_id: tenantId, os_type: osType, region_id: regionId || undefined } });
   return (resp.data as AliImage[]) ?? [];
 }
 
@@ -155,13 +155,13 @@ export async function getAliBilling(tenantId: number): Promise<AliBilling> {
 export interface AliInstanceType { id: string; cpu: number; memory_gb: number; family: string }
 export interface AliVSwitch { id: string; name: string; zone_id: string; cidr: string; vpc_id: string }
 
-export async function listAliInstanceTypes(tenantId: number, zoneId = ''): Promise<AliInstanceType[]> {
-  const resp = await api.get('/api/v1/aliyun/instance-types', { params: { tenant_id: tenantId, zone_id: zoneId } });
+export async function listAliInstanceTypes(tenantId: number, zoneId = '', regionId?: string): Promise<AliInstanceType[]> {
+  const resp = await api.get('/api/v1/aliyun/instance-types', { params: { tenant_id: tenantId, zone_id: zoneId, region_id: regionId || undefined } });
   return (resp.data as AliInstanceType[]) ?? [];
 }
 
-export async function listAliVSwitches(tenantId: number, zoneId = ''): Promise<AliVSwitch[]> {
-  const resp = await api.get('/api/v1/aliyun/vswitches', { params: { tenant_id: tenantId, zone_id: zoneId } });
+export async function listAliVSwitches(tenantId: number, zoneId = '', regionId?: string): Promise<AliVSwitch[]> {
+  const resp = await api.get('/api/v1/aliyun/vswitches', { params: { tenant_id: tenantId, zone_id: zoneId, region_id: regionId || undefined } });
   return (resp.data as AliVSwitch[]) ?? [];
 }
 

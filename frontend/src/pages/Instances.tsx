@@ -288,12 +288,17 @@ export default function Instances() {
       region_id: region, system_disk_category: 'cloud_essd', system_disk_size: 40, bandwidth_out: 5,
     });
     setCreateOpen(true);
+    loadCreateCascade(tenantId, region);
+  };
+
+  /** 按地域拉取新建实例的级联数据 */
+  const loadCreateCascade = (tid: number, region: string) => {
     setCreateDataLoading(true);
     Promise.all([
-      listAliInstanceTypes(tenantId),
-      listAliPublicImages(tenantId),
-      listAliVSwitches(tenantId),
-      listAliSecurityGroups(tenantId, region || undefined),
+      listAliInstanceTypes(tid, '', region),
+      listAliPublicImages(tid, 'linux', region),
+      listAliVSwitches(tid, '', region),
+      listAliSecurityGroups(tid, region || undefined),
     ])
       .then(([types, imgs, vsws, sgs]) => {
         setCreateZones([...new Set(vsws.map((v) => v.zone_id).filter(Boolean))].map((z) => ({ value: z, label: z })));
@@ -306,11 +311,18 @@ export default function Instances() {
       .finally(() => setCreateDataLoading(false));
   };
 
+  /** 新建实例弹窗内切换地域：级联数据按新地域重拉 */
+  const onCreateRegionChange = (region: string) => {
+    if (tenantId === undefined) return;
+    createForm.setFieldsValue({ zone_id: undefined, instance_type: undefined, image_id: undefined, vswitch_id: undefined, security_group_id: undefined });
+    loadCreateCascade(tenantId, region);
+  };
+
   const onCreateZoneChange = async (zoneId: string) => {
     if (tenantId === undefined) return;
     createForm.setFieldsValue({ vswitch_id: undefined });
     try {
-      const vsws = await listAliVSwitches(tenantId, zoneId);
+      const vsws = await listAliVSwitches(tenantId, zoneId, createForm.getFieldValue('region_id'));
       setCreateVswitches(vsws.map((v) => ({ value: v.id, label: `${v.name}（${v.cidr}）` })));
     } catch { /* 忽略 */ }
   };
@@ -612,6 +624,7 @@ export default function Instances() {
               options={regionOptions.map((r) => ({ value: r.id, label: r.name ? `${r.name}（${r.id}）` : r.id }))}
               showSearch
               optionFilterProp="label"
+              onChange={onCreateRegionChange}
             />
           </Form.Item>
           <Space style={{ display: 'flex' }}>
