@@ -219,9 +219,9 @@ class AliyunProvider(CloudProvider):
             })
         return out
 
-    def list_public_images(self, os_type: str = "linux") -> list[dict]:
+    def list_public_images(self, os_type: str = "linux", region_id: str | None = None) -> list[dict]:
         """公共镜像（用于创建实例/抢占式任务时选择）。"""
-        region = self.credentials.get("region_id") or ""
+        region = region_id or self.credentials.get("region_id") or ""
         items: list[dict] = []
         page, size = 1, 50
         while True:
@@ -341,9 +341,9 @@ class AliyunProvider(CloudProvider):
         return {"billing_cycle": d.get("BillingCycle", cycle), "total": round(total, 2), "products": products}
 
     # ---------------- 抢占式实例任务支持 ----------------
-    def list_instance_types(self, zone_id: str = "") -> list[dict]:
+    def list_instance_types(self, zone_id: str = "", region_id: str | None = None) -> list[dict]:
         """可用实例规格（用于抢占式任务选择）。"""
-        region = self.credentials.get("region_id") or ""
+        region = region_id or self.credentials.get("region_id") or ""
         params: dict = {"RegionId": region}
         if zone_id:
             params["ZoneId"] = zone_id
@@ -358,9 +358,9 @@ class AliyunProvider(CloudProvider):
             })
         return out
 
-    def list_vswitches(self, zone_id: str = "") -> list[dict]:
+    def list_vswitches(self, zone_id: str = "", region_id: str | None = None) -> list[dict]:
         """交换机列表（创建实例需要 VSwitchId）。"""
-        region = self.credentials.get("region_id") or ""
+        region = region_id or self.credentials.get("region_id") or ""
         params: dict = {"RegionId": region, "PageSize": 50}
         if zone_id:
             params["ZoneId"] = zone_id
