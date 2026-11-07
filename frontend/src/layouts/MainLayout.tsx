@@ -145,11 +145,12 @@ export default function MainLayout() {
   };
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
+    <Layout style={{ height: '100vh', overflow: 'hidden' }}>
       <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed} theme={dark ? 'dark' : 'light'}>
         <div
           style={{
             height: 64,
+            flexShrink: 0,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -168,12 +169,15 @@ export default function MainLayout() {
             </span>
           )}
         </div>
-        <Menu mode="inline" selectedKeys={selectedKey} items={menuItems} theme={dark ? 'dark' : 'light'} />
+        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, paddingBottom: 48 }}>
+          <Menu mode="inline" selectedKeys={selectedKey} items={menuItems} theme={dark ? 'dark' : 'light'} />
+        </div>
       </Sider>
-      <Layout>
+      <Layout style={{ height: '100vh', overflow: 'hidden' }}>
         <Header
           style={{
             padding: '0 24px',
+            flexShrink: 0,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -206,7 +210,7 @@ export default function MainLayout() {
             </Dropdown>
           </div>
         </Header>
-        <Content style={{ margin: 24, minHeight: 280 }}>
+        <Content style={{ margin: 24, flex: 1, overflowY: 'auto', minHeight: 0 }}>
           <Outlet />
         </Content>
       </Layout>
