@@ -336,11 +336,19 @@ def _get_shape_bandwidth(compute, compartment_id: str, shape: str | None) -> flo
     return None
 
 
+# 面板动作 -> OCI instance_action 合法值。注意 OCI 没有 "REBOOT"，
+# 控制台"重启"对应 SOFTRESET（向系统发关机命令后重启），RESET 为硬重启。
+_POWER_ACTION_MAP = {"start": "START", "stop": "STOP", "reboot": "SOFTRESET"}
+
+
 def power_instance(tenant: models.Tenant, instance_id: str, action: str) -> dict:
-    """电源操作：start / stop(硬关) / reboot。"""
+    """电源操作：start / stop(硬关) / reboot(软重启 SOFTRESET)。"""
+    oci_action = _POWER_ACTION_MAP.get(action)
+    if oci_action is None:
+        raise OciApiError(3102, f"不支持的电源操作：{action}", 400)
     compute, _ = _compute_network(tenant)
     try:
-        compute.instance_action(instance_id, action.upper())
+        compute.instance_action(instance_id, oci_action)
     except (ConnectTimeout, RequestException) as exc:
         raise OciApiError(3104, f"连接 OCI 超时：{exc}", 504)
     except ServiceError as exc:
