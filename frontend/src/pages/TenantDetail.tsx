@@ -2,11 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import {
+  Alert,
   Button,
   Card,
   Descriptions,
   Empty,
-  Modal,
+  Select,
   Skeleton,
   Space,
   Tag,
@@ -27,8 +28,10 @@ import {
   detectAccountType,
   getTenant,
   getTenantOverview,
+  listTenants,
   testTenantConnection,
   type TenantDetail,
+  type TenantOption,
   type TenantOverview,
 } from '../api/tenants';
 
@@ -45,6 +48,14 @@ export default function TenantDetailPage() {
   const [detectResult, setDetectResult] = useState<{ label: string; reasons: string[] } | null>(null);
   const [overview, setOverview] = useState<TenantOverview | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
+  /** 切换租户下拉（仅 OCI 租户） */
+  const [ociTenants, setOciTenants] = useState<TenantOption[]>([]);
+
+  useEffect(() => {
+    listTenants()
+      .then((list) => setOciTenants(list.filter((t) => (t.provider || 'oci') === 'oci')))
+      .catch(() => undefined); // 切换器加载失败不挡详情页
+  }, []);
 
   const fetchOne = useCallback(async () => {
     if (!id) return;
@@ -158,8 +169,17 @@ export default function TenantDetailPage() {
           {tenant.name}
         </Title>
         <Tag color={meta.color}>{meta.short}</Tag>
-        {accountTag}
+        {isOci && accountTag}
         {statusTag}
+        {isOci && ociTenants.length > 1 && (
+          <Select
+            style={{ width: 200, marginLeft: 'auto' }}
+            value={tenant.id}
+            options={ociTenants.map((t) => ({ value: t.id, label: t.name }))}
+            onChange={(v) => navigate(`/tenants/${v}`)}
+            placeholder="切换租户"
+          />
+        )}
       </div>
 
       <Space wrap>
@@ -218,7 +238,7 @@ export default function TenantDetailPage() {
               <Descriptions.Item label="地域">
                 <Tag color="blue">{regionLabel}</Tag>
               </Descriptions.Item>
-              <Descriptions.Item label="账号类型">{accountTag}</Descriptions.Item>
+              {isOci && <Descriptions.Item label="账号类型">{accountTag}</Descriptions.Item>}
               <Descriptions.Item label="账号标识">
                 {isOci ? (
                   <Text copyable>{tenant.tenancy_ocid}</Text>
@@ -258,6 +278,27 @@ export default function TenantDetailPage() {
           </Card>
         </StaggerItem>
 
+        {isOci && detectResult && (
+          <StaggerItem>
+            <Alert
+              type={detectResult.label === '付费号' ? 'warning' : 'success'}
+              showIcon
+              closable
+              onClose={() => setDetectResult(null)}
+              message={`检测结果：${detectResult.label}（启发式判断，仅供参考）`}
+              description={
+                <ul style={{ paddingLeft: 20, margin: '4px 0 0' }}>
+                  {detectResult.reasons.map((x, i) => (
+                    <li key={i} style={{ fontSize: 13 }}>
+                      {x}
+                    </li>
+                  ))}
+                </ul>
+              }
+            />
+          </StaggerItem>
+        )}
+
         {isOci && (
           <StaggerItem>
             <TenantOverviewCard overview={overview} loading={overviewLoading} />
@@ -295,27 +336,6 @@ export default function TenantDetailPage() {
         </StaggerItem>
       </StaggerGroup>
 
-      <Modal
-        title={detectResult ? `检测结果：${detectResult.label}` : '检测结果'}
-        open={detectResult !== null}
-        onOk={() => setDetectResult(null)}
-        onCancel={() => setDetectResult(null)}
-        cancelText="关闭"
-        width={520}
-      >
-        {detectResult && (
-          <div>
-            <p style={{ color: '#888' }}>启发式判断，仅供参考。如有误请手动修改。</p>
-            <ul style={{ paddingLeft: 20, margin: 0 }}>
-              {detectResult.reasons.map((x, i) => (
-                <li key={i} style={{ fontSize: 13 }}>
-                  {x}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </Modal>
     </Space>
   );
 }

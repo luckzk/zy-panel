@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   Button,
   Card,
   Form,
@@ -14,14 +15,13 @@ import {
   Typography,
   message,
 } from 'antd';
-import { PlusOutlined, QuestionCircleOutlined, SearchOutlined, UploadOutlined } from '@ant-design/icons';
+import { ApiOutlined, DeleteOutlined, EditOutlined, PlusOutlined, QuestionCircleOutlined, SearchOutlined, UploadOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { Link } from 'react-router-dom';
 import { REGION_CN } from '../types';
 import { getProviderMeta, providerOptions } from '../providers/registry';
 import { getRegions } from '../api/meta';
 import TenantApiGuide from '../components/TenantApiGuide';
-import RegionSubscriptions from '../components/RegionSubscriptions';
 import {
   batchCreateTenants,
   createTenant,
@@ -273,9 +273,8 @@ export default function Tenants() {
     : v === 'paid' ? <Tag color="gold">付费号</Tag>
     : <Text type="secondary">未标记</Text>;
 
-  /** 自动检测账号类型：启发式判断，结果自动写入 */
+  /** 自动检测账号类型：启发式判断，结果自动写入；结果内联展示，不弹 Modal */
   const [detecting, setDetecting] = useState<Record<number, boolean>>({});
-  /** 检测结果展示弹窗（声明式 Modal：antd 5.29 + React 19 下静态 Modal.info 不渲染） */
   const [detectResult, setDetectResult] = useState<{ name: string; label: string; reasons: string[] } | null>(null);
   const doDetect = async (record: TenantDetail) => {
     setDetecting((p) => ({ ...p, [record.id]: true }));
@@ -288,9 +287,6 @@ export default function Tenants() {
       setDetecting((p) => ({ ...p, [record.id]: false }));
     }
   };
-
-  /** 区域订阅弹窗（仅 OCI）：内容复用 RegionSubscriptions 组件 */
-  const [regionModal, setRegionModal] = useState<TenantDetail | null>(null);
 
   const columns: ColumnsType<TenantDetail> = [
     {
@@ -360,21 +356,25 @@ export default function Tenants() {
       dataIndex: 'account_type',
       key: 'account_type',
       width: 150,
-      render: (v: string, record: TenantDetail) => (
-        <Space size="small">
-          {renderAccountType(v)}
-          <Tooltip title="启发式自动检测（仅供参考）">
-            <Button
-              type="link"
-              size="small"
-              loading={!!detecting[record.id]}
-              onClick={() => doDetect(record)}
-            >
-              检测
-            </Button>
-          </Tooltip>
-        </Space>
-      ),
+      render: (v: string, record: TenantDetail) =>
+        // 阿里云不分免费/付费，不展示账号类型与检测
+        (record.provider || 'oci') === 'aliyun' ? (
+          <Text type="secondary">—</Text>
+        ) : (
+          <Space size="small">
+            {renderAccountType(v)}
+            <Tooltip title="启发式自动检测（仅供参考）">
+              <Button
+                type="link"
+                size="small"
+                loading={!!detecting[record.id]}
+                onClick={() => doDetect(record)}
+              >
+                检测
+              </Button>
+            </Tooltip>
+          </Space>
+        ),
     },
     {
       title: '状态',
@@ -385,24 +385,19 @@ export default function Tenants() {
     {
       title: '操作',
       key: 'action',
-      width: 300,
+      width: 150,
       render: (_, record) => (
         <Space>
-          <Button type="link" size="small" onClick={() => testConnection(record)}>
-            测试连接
-          </Button>
-          {(record.provider || 'oci') === 'oci' && (
-            <Button type="link" size="small" onClick={() => setRegionModal(record)}>
-              订阅区域
-            </Button>
-          )}
-          <Button type="link" size="small" onClick={() => openModal(record)}>
-            编辑
-          </Button>
+          <Tooltip title="测试连接">
+            <Button type="text" size="small" icon={<ApiOutlined />} loading={testState[record.id]?.status === 'testing'} onClick={() => testConnection(record)} />
+          </Tooltip>
+          <Tooltip title="编辑">
+            <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openModal(record)} />
+          </Tooltip>
           <Popconfirm title="确定删除该租户吗？" onConfirm={() => remove(record.id)}>
-            <Button type="link" size="small" danger>
-              删除
-            </Button>
+            <Tooltip title="删除">
+              <Button type="text" size="small" danger icon={<DeleteOutlined />} />
+            </Tooltip>
           </Popconfirm>
         </Space>
       ),
@@ -457,6 +452,25 @@ export default function Tenants() {
           optionFilterProp="label"
         />
       </Space>
+      {detectResult && (
+        <Alert
+          type={detectResult.label === '付费号' ? 'warning' : 'success'}
+          showIcon
+          closable
+          onClose={() => setDetectResult(null)}
+          style={{ marginBottom: 16 }}
+          message={`「${detectResult.name}」检测结果：${detectResult.label}（启发式判断，仅供参考）`}
+          description={
+            <ul style={{ paddingLeft: 20, margin: '4px 0 0' }}>
+              {detectResult.reasons.map((x, i) => (
+                <li key={i} style={{ fontSize: 13 }}>
+                  {x}
+                </li>
+              ))}
+            </ul>
+          }
+        />
+      )}
       <Table<TenantDetail>
         rowKey="id"
         columns={columns}
@@ -540,19 +554,26 @@ export default function Tenants() {
               );
             }}
           </Form.Item>
-          <Form.Item
-            name="account_type"
-            label="账号类型"
-            tooltip="OCI 没有查询账号类型的 API，这里手动标记，用于区分免费号/付费号"
-          >
-            <Select
-              allowClear
-              placeholder="未标记"
-              options={[
-                { value: 'free', label: '免费号' },
-                { value: 'paid', label: '付费号（升级号）' },
-              ]}
-            />
+          {/* 阿里云不分免费/付费，不展示账号类型 */}
+          <Form.Item noStyle shouldUpdate={(prev, cur) => prev.provider !== cur.provider}>
+            {({ getFieldValue }) =>
+              (getFieldValue('provider') || 'oci') === 'aliyun' ? null : (
+                <Form.Item
+                  name="account_type"
+                  label="账号类型"
+                  tooltip="OCI 没有查询账号类型的 API，这里手动标记，用于区分免费号/付费号"
+                >
+                  <Select
+                    allowClear
+                    placeholder="未标记"
+                    options={[
+                      { value: 'free', label: '免费号' },
+                      { value: 'paid', label: '付费号（升级号）' },
+                    ]}
+                  />
+                </Form.Item>
+              )
+            }
           </Form.Item>
         </Form>
       </Modal>
@@ -582,33 +603,6 @@ export default function Tenants() {
             style={{ fontFamily: 'monospace', fontSize: 12 }}
           />
         </Space>
-      </Modal>
-      <Modal
-        title={detectResult ? `「${detectResult.name}」检测结果：${detectResult.label}` : '检测结果'}
-        open={detectResult !== null}
-        onOk={() => setDetectResult(null)}
-        onCancel={() => setDetectResult(null)}
-        cancelText="关闭"
-        width={520}
-      >
-        {detectResult && (
-          <div>
-            <p style={{ color: '#888' }}>启发式判断，仅供参考。如有误请手动修改。</p>
-            <ul style={{ paddingLeft: 20, margin: 0 }}>
-              {detectResult.reasons.map((x, i) => <li key={i} style={{ fontSize: 13 }}>{x}</li>)}
-            </ul>
-          </div>
-        )}
-      </Modal>
-      <Modal
-        title={regionModal ? `「${regionModal.name}」区域订阅` : '区域订阅'}
-        open={regionModal !== null}
-        onCancel={() => setRegionModal(null)}
-        footer={null}
-        width={560}
-        destroyOnClose
-      >
-        {regionModal && <RegionSubscriptions tenantId={regionModal.id} />}
       </Modal>
       <TenantApiGuide open={guideOpen} onClose={() => setGuideOpen(false)} />
     </Card>
