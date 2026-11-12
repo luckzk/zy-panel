@@ -77,6 +77,13 @@ def _qr_data_uri(content: str) -> str:
 @router.post("/login", summary="登录，返回 JWT")
 def login(body: LoginIn, request: Request, db: Session = Depends(get_db)):
     ip = _client_ip(request)
+    # 防御模式 / IP 黑名单（TG 机器人管理）：先于密码校验拦截
+    from ..services import tg_menu
+
+    if tg_menu._defense_on():
+        return err(1003, "防御模式已开启，禁止登录", status=403)
+    if tg_menu.ip_is_blacklisted(ip):
+        return err(1003, "该 IP 已被列入黑名单，禁止登录", status=403)
     if _login_locked(ip):
         return err(1003, "登录失败次数过多，请 15 分钟后再试", status=429)
     user = db.query(models.User).filter(models.User.username == body.username).first()

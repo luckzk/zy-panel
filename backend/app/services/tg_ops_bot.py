@@ -21,6 +21,7 @@ import httpx
 
 from ..db import models
 from ..db.session import SessionLocal
+from . import tg_menu
 
 log = logging.getLogger(__name__)
 
@@ -29,15 +30,21 @@ _API = "https://api.telegram.org/bot{token}/{method}"
 _thread: threading.Thread | None = None
 _stop = threading.Event()
 
-HELP = """🤖 OCI 面板操作机器人
+HELP = """🤖 zy-panel 操作机器人
 
+/start - 打开按钮菜单（不用记命令）
 /instances - 实例列表
 /instance <关键词> - 实例详情
 /snatch - 抢机任务状态
 /traffic <关键词> - 24h 流量汇总
 /startvm|/stopvm|/rebootvm <关键词> - 电源操作
 /changeip <关键词> - 换 IP
-/help - 本帮助"""
+/ssh <命令> - 在已连接的实例上执行命令（先从菜单 SSH 管理连接）
+/exit - 退出当前输入（AI 聊天/填表）
+/help - 本帮助
+
+菜单里还有：创建实例、引导卷、任务启停、一键测活、资源监控、
+日志查询、AI 聊天、MFA、VNC、备份恢复、IP 黑名单、防御模式。"""
 
 
 def _get_setting(db, key: str, default: str = "") -> str:
@@ -126,21 +133,28 @@ def _find_instances(keyword: str) -> list[dict]:
         db.close()
 
 
-def _confirm_kb(action: str, tenant_id: int, instance_id: str) -> dict:
+def _confirm_kb(chat_id: str, action: str, tenant_id: int, instance_id: str) -> dict:
+    # 回调数据限 64 字节，实例 OCID 不直接进回调，改用短引用
+    ref = tg_menu._put_ref(chat_id, {"tenant_id": tenant_id, "instance_id": instance_id})
     return {
         "inline_keyboard": [[
-            {"text": "✅ 确认", "callback_data": f"confirm:{action}:{tenant_id}:{instance_id}"},
+            {"text": "✅ 确认", "callback_data": f"cf:{action}:{ref}"},
             {"text": "❌ 取消", "callback_data": "cancel"},
         ]]
     }
 
 
 def _handle_message(token: str, chat_id: str, text: str):
+    # 菜单侧先消费：/ssh、/exit、AI 聊天与各填表输入
+    if tg_menu.handle_text(token, chat_id, text.strip()):
+        return
     parts = text.strip().split(None, 1)
     cmd = parts[0].lstrip("/").split("@")[0].lower()
     arg = parts[1].strip() if len(parts) > 1 else ""
 
-    if cmd in ("start", "help"):
+    if cmd == "start":
+        tg_menu.show_menu(token, chat_id)
+    elif cmd == "help":
         _send(token, chat_id, HELP)
     elif cmd == "instances":
         items = _find_instances("")
@@ -219,7 +233,7 @@ def _handle_message(token: str, chat_id: str, text: str):
         op = {"startvm": "开机", "stopvm": "关机", "rebootvm": "重启"}[cmd]
         _send(token, chat_id,
               f"确认为 <b>{i['display_name']}</b> 执行「{op}」？",
-              reply_markup=_confirm_kb(cmd, i["tenant_id"], i["id"]))
+              reply_markup=_confirm_kb(chat_id, cmd, i["tenant_id"], i["id"]))
     elif cmd == "changeip":
         if not arg:
             _send(token, chat_id, "用法：/changeip <关键词>")
@@ -231,14 +245,18 @@ def _handle_message(token: str, chat_id: str, text: str):
         i = items[0]
         _send(token, chat_id,
               f"确认为 <b>{i['display_name']}</b>（当前 IP {i.get('public_ip') or '-'}）执行「换 IP」？",
-              reply_markup=_confirm_kb("changeip", i["tenant_id"], i["id"]))
+              reply_markup=_confirm_kb(chat_id, "changeip", i["tenant_id"], i["id"]))
     else:
         _send(token, chat_id, "未知命令，/help 查看帮助")
 
 
 def _handle_callback(token: str, cb):
-    data = (cb.get("data") or "")
     chat_id = str(cb["message"]["chat"]["id"])
+    # 菜单回调优先处理
+    if tg_menu.handle_callback(token, chat_id, cb):
+        return
+    # 兼容旧版确认按钮（confirm:action:tenant_id:instance_id）
+    data = (cb.get("data") or "")
     cb_id = cb["id"]
     _api(token, "answerCallbackQuery", callback_query_id=cb_id)
     if data == "cancel":
@@ -250,32 +268,8 @@ def _handle_callback(token: str, cb):
     except Exception:
         _send(token, chat_id, "回调参数无效")
         return
-    db = SessionLocal()
-    try:
-        tenant = db.get(models.Tenant, tenant_id)
-        if tenant is None:
-            _send(token, chat_id, "租户不存在")
-            return
-        db.expunge(tenant)
-        if action in ("startvm", "stopvm", "rebootvm"):
-            from . import instance_service
-
-            op = {"startvm": "start", "stopvm": "stop", "rebootvm": "reboot"}[action]
-            instance_service.power_instance(tenant, instance_id, op)
-            _send(token, chat_id, f"已下发「{op}」操作")
-            _audit_log(db, f"tg.{op}", f"TG 机器人对实例 {instance_id} 执行 {op}")
-        elif action == "changeip":
-            task = models.IpTask(tenant_id=tenant_id, instance_id=instance_id,
-                                 preferred_cidrs="[]", update_dns=False,
-                                 max_retries=3, status="running")
-            db.add(task)
-            db.commit()
-            _send(token, chat_id, f"已创建换 IP 任务（#{task.id}），后台执行中")
-            _audit_log(db, "tg.change_ip", f"TG 机器人对实例 {instance_id} 发起换 IP")
-    except Exception as exc:
-        _send(token, chat_id, f"执行失败：{str(exc)[:200]}")
-    finally:
-        db.close()
+    tg_menu.execute_confirm(token, chat_id, action,
+                            {"tenant_id": tenant_id, "instance_id": instance_id})
 
 
 def _audit_log(db, action: str, detail: str):
@@ -311,11 +305,15 @@ def _loop():
                 if "message" in upd:
                     m = upd["message"]
                     chat_id = str(m["chat"]["id"])
-                    text = (m.get("text") or "").strip()
-                    if not text.startswith("/"):
-                        continue
                     if allow and chat_id not in allow:
-                        _send(token, chat_id, "⛔ 未授权的 chat，命令已忽略")
+                        if m.get("text"):
+                            _send(token, chat_id, "⛔ 未授权的 chat，命令已忽略")
+                        continue
+                    if "document" in m:
+                        tg_menu.handle_document(token, chat_id, m["document"])
+                        continue
+                    text = (m.get("text") or "").strip()
+                    if not text:
                         continue
                     _handle_message(token, chat_id, text)
                 elif "callback_query" in upd:

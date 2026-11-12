@@ -96,11 +96,21 @@ def version(_user: models.User = Depends(get_current_user)):
 class TgBotIn(BaseModel):
     enabled: bool
     chat_ids: str = ""  # 逗号分隔的白名单 chat_id，为空则响应所有
+    ai_api_key: str = ""  # 传空表示不改动
+    ai_base_url: str = ""
+    ai_model: str = ""
 
 
 @router.get("/tg-bot", summary="TG 运维机器人配置")
 def get_tg_bot(user: models.User = Depends(get_admin_user)):
-    return ok(tg_ops_bot.get_ops_config())
+    from ..services import tg_menu
+
+    cfg = tg_ops_bot.get_ops_config()
+    ai = tg_menu.get_ai_config()
+    cfg["ai_has_key"] = ai["has_key"]
+    cfg["ai_base_url"] = ai["base_url"]
+    cfg["ai_model"] = ai["model"]
+    return ok(cfg)
 
 
 @router.post("/tg-bot", summary="更新 TG 运维机器人配置（仅管理员）")
@@ -109,11 +119,19 @@ def update_tg_bot(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_admin_user),
 ):
+    from ..services import tg_menu
+
     cfg = tg_ops_bot.set_ops_config(body.enabled, body.chat_ids)
+    if body.ai_api_key or body.ai_base_url or body.ai_model:
+        tg_menu.set_ai_config(api_key=body.ai_api_key, base_url=body.ai_base_url, model=body.ai_model)
     # 脱敏返回
     cfg = dict(cfg)
     if cfg.get("token"):
         cfg["token"] = "***"
+    ai = tg_menu.get_ai_config()
+    cfg["ai_has_key"] = ai["has_key"]
+    cfg["ai_base_url"] = ai["base_url"]
+    cfg["ai_model"] = ai["model"]
     write_log(db, user.id, "system.tg_bot", f"更新 TG 运维机器人配置：enabled={body.enabled}")
     return ok(cfg)
 

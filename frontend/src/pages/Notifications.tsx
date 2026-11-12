@@ -84,6 +84,11 @@ export default function Notifications() {
   const [botChatIds, setBotChatIds] = useState('');
   const [botHasToken, setBotHasToken] = useState(false);
   const [botSaving, setBotSaving] = useState(false);
+  // AI 聊天配置（SiliconFlow）
+  const [aiApiKey, setAiApiKey] = useState('');
+  const [aiHasKey, setAiHasKey] = useState(false);
+  const [aiBaseUrl, setAiBaseUrl] = useState('https://api.siliconflow.cn/v1');
+  const [aiModel, setAiModel] = useState('Qwen/Qwen3-8B');
 
   const fetchBot = useCallback(async () => {
     try {
@@ -91,6 +96,9 @@ export default function Notifications() {
       setBotEnabled(cfg.enabled);
       setBotChatIds((cfg.chat_ids ?? []).join(','));
       setBotHasToken(!!cfg.token);
+      setAiHasKey(!!cfg.ai_has_key);
+      if (cfg.ai_base_url) setAiBaseUrl(cfg.ai_base_url);
+      if (cfg.ai_model) setAiModel(cfg.ai_model);
     } catch {
       /* 无管理员权限时接口 403，静默 */
     }
@@ -99,7 +107,12 @@ export default function Notifications() {
   const saveBot = async () => {
     setBotSaving(true);
     try {
-      await updateTgBotConfig(botEnabled, botChatIds);
+      await updateTgBotConfig(botEnabled, botChatIds, {
+        api_key: aiApiKey.trim(),
+        base_url: aiBaseUrl.trim(),
+        model: aiModel,
+      });
+      setAiApiKey('');
       message.success('TG 机器人配置已保存');
       fetchBot();
     } finally {
@@ -305,7 +318,7 @@ export default function Notifications() {
           <Text type="secondary" style={{ fontSize: 12 }}>
             启用后，可在 Telegram 里直接给机器人发命令查实例、管抢机、换 IP。
             Token 复用下方第一个启用的 Telegram 渠道{botHasToken ? '（已配置）' : '（尚未配置 Telegram 渠道）'}。
-            支持命令：/instances /instance /snatch /traffic /startvm /stopvm /rebootvm /changeip。
+            支持命令：/start 打开菜单、/instances /instance /snatch /traffic /startvm /stopvm /rebootvm /changeip /ssh。
           </Text>
           <Space wrap>
             <Space>
@@ -321,6 +334,33 @@ export default function Notifications() {
             <Button type="primary" loading={botSaving} onClick={saveBot}>
               保存
             </Button>
+          </Space>
+          <Space wrap align="start">
+            <Text type="secondary" style={{ fontSize: 12, paddingTop: 5 }}>AI 聊天：</Text>
+            <Input.Password
+              placeholder={aiHasKey ? 'API Key 已保存，留空不改' : 'SiliconFlow API Key（未填则 AI 聊天不可用）'}
+              value={aiApiKey}
+              onChange={(e) => setAiApiKey(e.target.value)}
+              autoComplete="new-password"
+              style={{ width: 280 }}
+            />
+            <Input
+              placeholder="API 地址"
+              value={aiBaseUrl}
+              onChange={(e) => setAiBaseUrl(e.target.value)}
+              style={{ width: 240 }}
+            />
+            <Select
+              value={aiModel}
+              onChange={setAiModel}
+              style={{ width: 220 }}
+              options={[
+                { label: 'DeepSeek-R1 推理', value: 'deepseek-ai/DeepSeek-R1-0528-Qwen3-8B' },
+                { label: 'Qwen3-8B', value: 'Qwen/Qwen3-8B' },
+                { label: 'GLM-Z1-9B 推理', value: 'THUDM/GLM-Z1-9B-0414' },
+                { label: 'Qwen2.5-7B', value: 'Qwen/Qwen2.5-7B-Instruct' },
+              ]}
+            />
           </Space>
         </Space>
       </Card>

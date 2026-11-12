@@ -50,6 +50,9 @@ export interface TgBotConfig {
   enabled: boolean;
   token: string; // 已脱敏（***）或空
   chat_ids: string[];
+  ai_has_key?: boolean;
+  ai_base_url?: string;
+  ai_model?: string;
 }
 
 /** TG 运维机器人配置 */
@@ -58,9 +61,13 @@ export async function getTgBotConfig(): Promise<TgBotConfig> {
   return resp.data as TgBotConfig;
 }
 
-/** 更新 TG 运维机器人配置 */
-export async function updateTgBotConfig(enabled: boolean, chat_ids: string): Promise<void> {
-  await api.post('/api/v1/system/tg-bot', { enabled, chat_ids });
+/** 更新 TG 运维机器人配置（ai_api_key 传空表示不改） */
+export async function updateTgBotConfig(
+  enabled: boolean,
+  chat_ids: string,
+  ai?: { api_key?: string; base_url?: string; model?: string },
+): Promise<void> {
+  await api.post('/api/v1/system/tg-bot', { enabled, chat_ids, ...(ai ?? {}) });
 }
 
 export interface UpdateCheck {

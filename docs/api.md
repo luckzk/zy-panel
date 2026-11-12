@@ -295,8 +295,8 @@
 | GET | /api/v1/system/backup | 加密备份导出（文件下载） |
 | POST | /api/v1/system/restore | 备份恢复（上传加密备份文件） |
 | GET | /api/v1/system/version | 版本信息 |
-| GET | /api/v1/system/tg-bot | TG 运维机器人配置 |
-| POST | /api/v1/system/tg-bot | 更新 TG 运维机器人配置（仅管理员） |
+| GET | /api/v1/system/tg-bot | TG 运维机器人配置（含 AI 聊天配置，Key 不返回明文） |
+| POST | /api/v1/system/tg-bot | 更新 TG 运维机器人配置（仅管理员，ai_api_key 留空表示不改） |
 | GET | /api/v1/system/update/check | 检查更新 |
 | POST | /api/v1/system/update/feed | 配置更新源（仅管理员） |
 | POST | /api/v1/system/update/apply | 上传更新包并应用（仅管理员） |
