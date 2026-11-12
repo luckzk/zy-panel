@@ -263,7 +263,7 @@ export default function System() {
                 </div>
                 <div>
                   <p style={{ marginBottom: 8, color: '#666' }}>
-                    从备份文件恢复租户配置与任务数据（仅管理员）。
+                    从备份文件恢复租户与任务数据（仅管理员）。
                   </p>
                   <Upload
                     accept=".bin,.bak"

@@ -88,6 +88,11 @@ export default function IAM() {
   const [memberGroup, setMemberGroup] = useState<IamGroup | null>(null);
   const [members, setMembers] = useState<GroupMember[]>([]);
   const [addMemberUserId, setAddMemberUserId] = useState<string>();
+  // 删除确认弹窗（声明式 Modal：antd 5.29 + React 19 下静态 Modal.confirm 不渲染）
+  const [deleteUser, setDeleteUser] = useState<IamUser | null>(null);
+  const [deleteGroup, setDeleteGroup] = useState<{ id: string; name: string } | null>(null);
+  const [deleteKeyFp, setDeleteKeyFp] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -156,17 +161,38 @@ export default function IAM() {
     setUserOpen(false);
   };
   const confirmDeleteUser = (u: IamUser) => {
-    Modal.confirm({
-      title: `删除用户 ${u.name}？`,
-      content: '删除后不可恢复；若面板的租户配置正在使用该用户的 API 密钥，该租户将失效。请先确认。',
-      okText: '确认删除',
-      okType: 'danger',
-      cancelText: '取消',
-      onOk: () => {
-        if (tenantId === undefined) return;
-        return doAction(() => deleteIamUser(tenantId, u.id), '用户已删除');
-      },
-    });
+    setDeleteUser(u);
+  };
+  const doDeleteGroup = async () => {
+    if (tenantId === undefined || !deleteGroup) return;
+    setDeleting(true);
+    try {
+      await doAction(() => deleteIamGroup(tenantId, deleteGroup.id), '用户组已删除');
+      setDeleteGroup(null);
+    } finally {
+      setDeleting(false);
+    }
+  };
+  const doDeleteApiKey = async () => {
+    if (tenantId === undefined || !keyUser || !deleteKeyFp) return;
+    setDeleting(true);
+    try {
+      await doAction(() => deleteApiKey(tenantId, keyUser.id, deleteKeyFp), 'API 密钥已删除');
+      setApiKeys(await listApiKeys(tenantId, keyUser.id).catch(() => []));
+      setDeleteKeyFp(null);
+    } finally {
+      setDeleting(false);
+    }
+  };
+  const doDeleteUser = async () => {
+    if (tenantId === undefined || !deleteUser) return;
+    setDeleting(true);
+    try {
+      await doAction(() => deleteIamUser(tenantId, deleteUser.id), '用户已删除');
+      setDeleteUser(null);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   /* ---------- API 密钥 ---------- */
@@ -284,18 +310,7 @@ export default function IAM() {
           <Button
             size="small"
             danger
-            onClick={() =>
-              Modal.confirm({
-                title: `删除用户组 ${r.name}？`,
-                okText: '确认删除',
-                okType: 'danger',
-                cancelText: '取消',
-                onOk: () => {
-                  if (tenantId === undefined) return;
-                  return doAction(() => deleteIamGroup(tenantId, r.id), '用户组已删除');
-                },
-              })
-            }
+            onClick={() => setDeleteGroup({ id: r.id, name: r.name })}
           >
             删除
           </Button>
@@ -414,20 +429,7 @@ export default function IAM() {
                 <Button
                   size="small"
                   danger
-                  onClick={() =>
-                    Modal.confirm({
-                      title: '删除该 API 密钥？',
-                      content: '使用该密钥的程序/租户配置将立即失效。',
-                      okText: '确认删除',
-                      okType: 'danger',
-                      cancelText: '取消',
-                      onOk: async () => {
-                        if (tenantId === undefined || !keyUser) return;
-                        await doAction(() => deleteApiKey(tenantId, keyUser.id, r.fingerprint), 'API 密钥已删除');
-                        setApiKeys(await listApiKeys(tenantId, keyUser.id).catch(() => []));
-                      },
-                    })
-                  }
+                  onClick={() => setDeleteKeyFp(r.fingerprint)}
                 >
                   删除
                 </Button>
@@ -728,6 +730,42 @@ export default function IAM() {
           ]}
         />
       </Drawer>
+
+      {/* 删除确认（声明式 Modal） */}
+      <Modal
+        title={deleteUser ? `删除用户 ${deleteUser.name}？` : '删除用户？'}
+        open={deleteUser !== null}
+        onCancel={() => setDeleteUser(null)}
+        onOk={doDeleteUser}
+        okText="确认删除"
+        okType="danger"
+        cancelText="取消"
+        confirmLoading={deleting}
+      >
+        删除后不可恢复；若面板的租户正在使用该用户的 API 密钥，该租户将失效。请先确认。
+      </Modal>
+      <Modal
+        title={deleteGroup ? `删除用户组 ${deleteGroup.name}？` : '删除用户组？'}
+        open={deleteGroup !== null}
+        onCancel={() => setDeleteGroup(null)}
+        onOk={doDeleteGroup}
+        okText="确认删除"
+        okType="danger"
+        cancelText="取消"
+        confirmLoading={deleting}
+      />
+      <Modal
+        title="删除该 API 密钥？"
+        open={deleteKeyFp !== null}
+        onCancel={() => setDeleteKeyFp(null)}
+        onOk={doDeleteApiKey}
+        okText="确认删除"
+        okType="danger"
+        cancelText="取消"
+        confirmLoading={deleting}
+      >
+        使用该密钥的程序/租户将立即失效。
+      </Modal>
     </Card>
   );
 }

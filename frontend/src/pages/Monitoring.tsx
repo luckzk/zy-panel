@@ -177,7 +177,7 @@ export default function Monitoring() {
 
       {tenants.length === 0 ? (
         <Card>
-          <Empty description="还没有租户配置，请先到「租户配置」页添加 OCI 租户" />
+          <Empty description="还没有租户，请先到「租户管理」页添加 OCI 租户" />
         </Card>
       ) : (
         <>

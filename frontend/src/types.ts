@@ -1,6 +1,6 @@
 /** 业务实体 TypeScript 类型与常量（无任何 mock 数据） */
 
-/** 租户配置 */
+/** 租户 */
 export interface Tenant {
   id: string;
   name: string;

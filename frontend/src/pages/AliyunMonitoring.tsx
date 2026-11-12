@@ -198,7 +198,7 @@ export default function AliyunMonitoring() {
 
       {tenants.length === 0 ? (
         <Card>
-          <Empty description="还没有阿里云租户，请先到「租户配置」页添加" />
+          <Empty description="还没有阿里云租户，请先到「租户管理」页添加" />
         </Card>
       ) : (
         <Spin spinning={loading}>
