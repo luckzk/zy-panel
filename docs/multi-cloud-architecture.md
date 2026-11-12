@@ -1,11 +1,11 @@
-# 多云架构设计（oci-panel）
+# 多云架构设计（zy-panel）
 
-> 目标：OCI（现有）+ 阿里云（在建）+ AWS / GCP / Azure（未来）在一个面板内融合管理。
+> 目标：OCI（现有）+ 阿里云（已接入）+ AWS / GCP / Azure（未来）在一个面板内融合管理。
 > 调研结论（2026-10-13）：CloudExplorer、行云管家、Morpheus 等主流产品一律采用"融合列表 + 云厂商列/筛选 + 统一详情模板按云条件渲染"，顶层切换只出现在二级钻取页。本设计遵循该模式。
 
 ## 1. 设计原则
 
-1. **OCI 零回归**：现有 141 个路由继续工作，OCI 作为第一个 Provider 适配器接入，不重写。
+1. **OCI 零回归**：现有 241 个路由（2026-11-12 统计）继续工作，OCI 作为第一个 Provider 适配器接入，不重写。
 2. **加厂商 = 加模块 + 注册一行**：AWS / GCP / Azure 后续接入不改核心代码。
 3. **归一化只做最小公共面**：实例列表/详情/电源、安全组、卷等基础资源归一化；厂商特有功能（OCI 抢机、一键 500M、串行控制台、阿里云抢占式）走厂商命名空间，不硬塞进抽象层。
 4. **凭证统一加密存储**：Tenant 一张表，一个 Fernet 加密 JSON 字段装各厂商凭证，加厂商不加表字段。
@@ -19,14 +19,9 @@ backend/app/providers/
 │                    # get_provider(tenant) -> CloudProvider
 ├── base.py          # CloudProvider ABC、归一化 DTO、Capability、ProviderError
 ├── oci/             # OciProvider：适配现有 service（instance_service 等），不重写
-│   ├── __init__.py
-│   ├── instances.py
-│   ├── volumes.py
-│   └── network.py
-├── aliyun/          # AliyunProvider：新写
-│   ├── __init__.py
-│   ├── client.py    # AcsClient 工厂（凭证解密 + region endpoint）
-│   └── instances.py
+│   └── __init__.py  # 单文件实现（实例/卷/网络/镜像等均在此）
+├── aliyun/          # AliyunProvider：ECS / VPC / OSS / RDS / BSS 等
+│   └── __init__.py  # 单文件实现（AcsClient 工厂 + 各资源方法）
 ├── aws/             # 未来：boto3
 ├── gcp/             # 未来：google-cloud-*
 └── azure/           # 未来：azure-identity + mgmt SDK
