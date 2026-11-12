@@ -64,6 +64,10 @@ def subscribe_region(tenant: models.Tenant, region_key: str) -> dict:
     except (ConnectTimeout, RequestException) as exc:
         raise OciApiError(3104, f"连接 OCI 超时：{exc}", 504)
     except ServiceError as exc:
+        # 409 EntityAlreadyExists：同一区域的订阅请求已在处理中（重复点订阅时常见），
+        # 不是失败，等几分钟后刷新即变为 READY；不要把 OCI 的整段堆栈透给用户
+        if exc.status == 409 and (exc.code or "") == "EntityAlreadyExists":
+            raise OciApiError(3103, f"区域 {region_key} 已在订阅中（上一条订阅请求仍在处理），请等几分钟后刷新查看", 502)
         raise _translate(exc, f"订阅区域 {region_key}")
     return {
         "region_key": sub.region_key,
