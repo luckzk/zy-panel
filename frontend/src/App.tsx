@@ -7,6 +7,7 @@ import { useThemeStore } from './stores/theme';
 import { futuristicTheme } from './theme/futuristic';
 import FuturisticBackground from './components/FuturisticBackground';
 import './theme/futuristic.css';
+import './styles/motion.css';
 
 /** 应用入口：全局 ConfigProvider（中文 + 三主题）挂载路由 */
 function App() {

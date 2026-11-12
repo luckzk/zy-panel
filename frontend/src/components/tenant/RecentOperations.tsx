@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Card, Empty, List, Spin, Typography } from 'antd';
+import { Card, Empty, List, Skeleton, Typography } from 'antd';
 import { getTenantRecentOperations, type RecentOperation } from '../../api/tenants';
 
 const { Text } = Typography;
@@ -37,9 +37,7 @@ export default function RecentOperations({ tenantId }: { tenantId: number }) {
       }
     >
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 40 }}>
-          <Spin />
-        </div>
+        <Skeleton active paragraph={{ rows: 3 }} />
       ) : items.length === 0 ? (
         <Empty description="暂无与该租户相关的操作记录" />
       ) : (

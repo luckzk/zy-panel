@@ -7,8 +7,8 @@ import {
   Descriptions,
   Empty,
   Modal,
+  Skeleton,
   Space,
-  Spin,
   Tag,
   Tooltip,
   Typography,
@@ -22,6 +22,7 @@ import FreeTierCard from '../components/tenant/FreeTierCard';
 import BillingCard from '../components/tenant/BillingCard';
 import AliyunOverviewCard from '../components/tenant/AliyunOverviewCard';
 import RecentOperations from '../components/tenant/RecentOperations';
+import { StaggerGroup, StaggerItem } from '../components/motion';
 import {
   detectAccountType,
   getTenant,
@@ -110,9 +111,15 @@ export default function TenantDetailPage() {
 
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: 80 }}>
-        <Spin size="large" />
-      </div>
+      <Space direction="vertical" style={{ width: '100%' }} size="middle">
+        <Skeleton active paragraph={{ rows: 0 }} title={{ width: 220 }} />
+        <Card>
+          <Skeleton active paragraph={{ rows: 4 }} />
+        </Card>
+        <Card>
+          <Skeleton active paragraph={{ rows: 3 }} />
+        </Card>
+      </Space>
     );
   }
   if (!tenant) {
@@ -186,83 +193,107 @@ export default function TenantDetailPage() {
         )}
       </Space>
 
-      <Card
-        title="基本信息"
-        extra={
-          <Space>
-            <Button size="small" loading={testing} onClick={testConnection}>
-              测试连接
-            </Button>
-            {isOci && (
-              <Button size="small" loading={detecting} onClick={doDetect}>
-                检测账号类型
-              </Button>
-            )}
-          </Space>
-        }
-      >
-        <Descriptions column={2} bordered size="small">
-          <Descriptions.Item label="名称">{tenant.name}</Descriptions.Item>
-          <Descriptions.Item label="云厂商">
-            <Tag color={meta.color}>{meta.short}</Tag>
-          </Descriptions.Item>
-          <Descriptions.Item label="地域">
-            <Tag color="blue">{regionLabel}</Tag>
-          </Descriptions.Item>
-          <Descriptions.Item label="账号类型">{accountTag}</Descriptions.Item>
-          <Descriptions.Item label="账号标识">
-            {isOci ? (
-              <Text copyable>{tenant.tenancy_ocid}</Text>
-            ) : (
-              <Text copyable>{tenant.access_key_id_masked || '—'}</Text>
-            )}
-          </Descriptions.Item>
-          <Descriptions.Item label="连通性">
-            {tenant.last_tested_at ? (
-              <Tooltip
-                title={`上次测试：${new Date(tenant.last_tested_at).toLocaleString('zh-CN', { hour12: false })}`}
-              >
-                {statusTag}
-              </Tooltip>
-            ) : (
-              statusTag
-            )}
-          </Descriptions.Item>
-          {isOci && (
-            <>
-              <Descriptions.Item label="Oracle 租户名">
-                {overviewLoading ? '加载中…' : overview?.tenancy_name || '—'}
+      <StaggerGroup style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <StaggerItem>
+          <Card
+            title="基本信息"
+            extra={
+              <Space>
+                <Button size="small" loading={testing} onClick={testConnection}>
+                  测试连接
+                </Button>
+                {isOci && (
+                  <Button size="small" loading={detecting} onClick={doDetect}>
+                    检测账号类型
+                  </Button>
+                )}
+              </Space>
+            }
+          >
+            <Descriptions column={2} bordered size="small">
+              <Descriptions.Item label="名称">{tenant.name}</Descriptions.Item>
+              <Descriptions.Item label="云厂商">
+                <Tag color={meta.color}>{meta.short}</Tag>
               </Descriptions.Item>
-              <Descriptions.Item label="User OCID">
-                <Text copyable>{tenant.user_ocid}</Text>
+              <Descriptions.Item label="地域">
+                <Tag color="blue">{regionLabel}</Tag>
               </Descriptions.Item>
-              <Descriptions.Item label="Fingerprint">{tenant.fingerprint}</Descriptions.Item>
-            </>
-          )}
-          <Descriptions.Item label="代理">{tenant.proxy || '—'}</Descriptions.Item>
-          <Descriptions.Item label="创建时间">
-            {tenant.created_at
-              ? new Date(tenant.created_at).toLocaleString('zh-CN', { hour12: false })
-              : '—'}
-          </Descriptions.Item>
-        </Descriptions>
-      </Card>
+              <Descriptions.Item label="账号类型">{accountTag}</Descriptions.Item>
+              <Descriptions.Item label="账号标识">
+                {isOci ? (
+                  <Text copyable>{tenant.tenancy_ocid}</Text>
+                ) : (
+                  <Text copyable>{tenant.access_key_id_masked || '—'}</Text>
+                )}
+              </Descriptions.Item>
+              <Descriptions.Item label="连通性">
+                {tenant.last_tested_at ? (
+                  <Tooltip
+                    title={`上次测试：${new Date(tenant.last_tested_at).toLocaleString('zh-CN', { hour12: false })}`}
+                  >
+                    {statusTag}
+                  </Tooltip>
+                ) : (
+                  statusTag
+                )}
+              </Descriptions.Item>
+              {isOci && (
+                <>
+                  <Descriptions.Item label="Oracle 租户名">
+                    {overviewLoading ? '加载中…' : overview?.tenancy_name || '—'}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="User OCID">
+                    <Text copyable>{tenant.user_ocid}</Text>
+                  </Descriptions.Item>
+                  <Descriptions.Item label="Fingerprint">{tenant.fingerprint}</Descriptions.Item>
+                </>
+              )}
+              <Descriptions.Item label="代理">{tenant.proxy || '—'}</Descriptions.Item>
+              <Descriptions.Item label="创建时间">
+                {tenant.created_at
+                  ? new Date(tenant.created_at).toLocaleString('zh-CN', { hour12: false })
+                  : '—'}
+              </Descriptions.Item>
+            </Descriptions>
+          </Card>
+        </StaggerItem>
 
-      {isOci && <TenantOverviewCard overview={overview} loading={overviewLoading} />}
+        {isOci && (
+          <StaggerItem>
+            <TenantOverviewCard overview={overview} loading={overviewLoading} />
+          </StaggerItem>
+        )}
 
-      {!isOci && <AliyunOverviewCard tenantId={tenant.id} />}
+        {!isOci && (
+          <StaggerItem>
+            <AliyunOverviewCard tenantId={tenant.id} />
+          </StaggerItem>
+        )}
 
-      {isOci && <FreeTierCard tenantId={tenant.id} />}
+        {isOci && (
+          <StaggerItem>
+            <FreeTierCard tenantId={tenant.id} />
+          </StaggerItem>
+        )}
 
-      {isOci && <BillingCard tenantId={tenant.id} />}
+        {isOci && (
+          <StaggerItem>
+            <BillingCard tenantId={tenant.id} />
+          </StaggerItem>
+        )}
 
-      {isOci && (
-        <Card title="区域订阅">
-          <RegionSubscriptions tenantId={tenant.id} />
-        </Card>
-      )}
+        {isOci && (
+          <StaggerItem>
+            <Card title="区域订阅">
+              <RegionSubscriptions tenantId={tenant.id} />
+            </Card>
+          </StaggerItem>
+        )}
 
-      <RecentOperations tenantId={tenant.id} />
+        <StaggerItem>
+          <RecentOperations tenantId={tenant.id} />
+        </StaggerItem>
+      </StaggerGroup>
 
       <Modal
         title={detectResult ? `检测结果：${detectResult.label}` : '检测结果'}

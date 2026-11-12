@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Card, Col, Descriptions, Empty, Row, Spin, Statistic, Tag, Typography } from 'antd';
+import { Card, Col, Descriptions, Empty, Row, Skeleton, Statistic, Tag, Typography } from 'antd';
 import type { TenantOverview } from '../../api/tenants';
 
 const { Text } = Typography;
@@ -34,9 +34,7 @@ export default function TenantOverviewCard({
   return (
     <Card title="资源概览">
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 40 }}>
-          <Spin />
-        </div>
+        <Skeleton active paragraph={{ rows: 4 }} />
       ) : !overview ? (
         <Empty description="总览获取失败，稍后重试" />
       ) : (

@@ -1,0 +1,45 @@
+/* 全站微交互：按钮与卡片悬停。不改配色，只加动效。 */
+
+/* 按钮：悬停上浮 + 阴影，按下回缩 */
+.ant-btn {
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.ant-btn:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+.ant-btn:not(:disabled):active {
+  transform: translateY(0) scale(0.97);
+  box-shadow: none;
+}
+
+/* 卡片：悬停上浮 + 阴影加深 + 边框高亮 */
+.ant-card {
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+.ant-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  border-color: rgba(22, 119, 255, 0.35);
+}
+
+/* 减弱动效：系统开启时全部禁用 */
+@media (prefers-reduced-motion: reduce) {
+  .ant-btn,
+  .ant-card {
+    transition: none;
+  }
+  .ant-btn:not(:disabled):hover,
+  .ant-card:hover {
+    transform: none;
+    box-shadow: none;
+  }
+}

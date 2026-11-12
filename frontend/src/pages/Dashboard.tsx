@@ -36,6 +36,7 @@ import { listTenants, type TenantOption } from '../api/tenants';
 import { getQuotas, getTraffic, type QuotaItem, type TrafficPoint } from '../api/monitoring';
 import { getIpMap, refreshIpMap, type IpMapPoint } from '../api/ipinfo';
 import WorldMap from '../components/WorldMap';
+import { StaggerGroup, StaggerItem } from '../components/motion';
 import { listSnatchTasks } from '../api/snatch';
 import type { SnatchTask } from '../types';
 import { api } from '../api/client';
@@ -428,23 +429,27 @@ export default function Dashboard() {
           )}
 
           {/* 统计卡：数据未到时先展示骨架屏 */}
-          <Row gutter={16}>
-            {cards.length > 0 ? (
-              cards.map((c) => (
-                <Col key={c.key} xs={12} sm={12} md={8} lg={4}>
-                  <StatCard item={c} />
-                </Col>
-              ))
-            ) : (
-              [0, 1, 2, 3, 4, 5].map((i) => (
-                <Col key={i} xs={12} sm={12} md={8} lg={4}>
-                  <FutCard bodyStyle={{ padding: 16 }}>
-                    <Skeleton active paragraph={{ rows: 1 }} title={{ width: '60%' }} />
-                  </FutCard>
-                </Col>
-              ))
-            )}
-          </Row>
+          <StaggerGroup>
+            <Row gutter={16}>
+              {cards.length > 0 ? (
+                cards.map((c) => (
+                  <Col key={c.key} xs={12} sm={12} md={8} lg={4}>
+                    <StaggerItem>
+                      <StatCard item={c} />
+                    </StaggerItem>
+                  </Col>
+                ))
+              ) : (
+                [0, 1, 2, 3, 4, 5].map((i) => (
+                  <Col key={i} xs={12} sm={12} md={8} lg={4}>
+                    <FutCard bodyStyle={{ padding: 16 }}>
+                      <Skeleton active paragraph={{ rows: 1 }} title={{ width: '60%' }} />
+                    </FutCard>
+                  </Col>
+                ))
+              )}
+            </Row>
+          </StaggerGroup>
 
           {/* 流量 + 状态 */}
           <Row gutter={16} style={{ marginTop: 16 }}>

@@ -27,6 +27,7 @@ import {
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/auth';
 import { useThemeStore } from '../stores/theme';
+import { PageTransition } from '../components/motion';
 
 const { Header, Sider, Content } = Layout;
 
@@ -214,7 +215,9 @@ export default function MainLayout() {
           </div>
         </Header>
         <Content style={{ margin: 24, flex: 1, overflowY: 'auto', minHeight: 0 }}>
-          <Outlet />
+          <PageTransition routeKey={location.pathname}>
+            <Outlet />
+          </PageTransition>
         </Content>
       </Layout>
     </Layout>

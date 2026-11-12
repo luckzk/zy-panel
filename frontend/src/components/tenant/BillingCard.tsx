@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Card, Col, Empty, Row, Spin, Statistic, Tooltip, Typography } from 'antd';
+import { Card, Col, Empty, Row, Skeleton, Statistic, Tooltip, Typography } from 'antd';
 import { getBillingSummary, type BillingSummary } from '../../api/billing';
 
 const { Text } = Typography;
@@ -36,9 +36,7 @@ export default function BillingCard({ tenantId }: { tenantId: number }) {
   return (
     <Card title="费用（近 90 天）">
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 40 }}>
-          <Spin tip="账单接口可能较慢，请稍候…" />
-        </div>
+        <Skeleton active paragraph={{ rows: 3 }} />
       ) : failed || !data ? (
         <Empty description="费用查询失败（账单接口可能超时），不影响其他内容" />
       ) : (

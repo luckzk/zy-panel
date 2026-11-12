@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ReloadOutlined } from '@ant-design/icons';
-import { Button, Card, Col, Empty, Progress, Row, Spin, Typography } from 'antd';
+import { Button, Card, Col, Empty, Progress, Row, Skeleton, Typography } from 'antd';
 import { getFreeTierSummary, type FreeTierSummary } from '../../api/free_tier';
+import { StaggerGroup, StaggerItem } from '../motion';
 
 const { Text } = Typography;
 
@@ -50,9 +51,15 @@ export default function FreeTierCard({ tenantId }: { tenantId: number }) {
       }
     >
       {loading && !data ? (
-        <div style={{ textAlign: 'center', padding: 40 }}>
-          <Spin />
-        </div>
+        <Row gutter={[16, 16]}>
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <Col xs={24} sm={12} lg={8} key={i}>
+              <Card size="small">
+                <Skeleton active paragraph={{ rows: 1 }} title={{ width: '50%' }} />
+              </Card>
+            </Col>
+          ))}
+        </Row>
       ) : !data || data.items.length === 0 ? (
         <Empty description="暂无数据" />
       ) : (
@@ -61,10 +68,12 @@ export default function FreeTierCard({ tenantId }: { tenantId: number }) {
             统计时间：{new Date(data.generated_at).toLocaleString('zh-CN', { hour12: false })}
             {data.cached ? '（缓存）' : ''}
           </Text>
-          <Row gutter={[16, 16]} style={{ marginTop: 12 }}>
-            {data.items.map((it) => (
-              <Col xs={24} sm={12} lg={8} key={it.key}>
-                <Card size="small" title={it.name}>
+          <StaggerGroup>
+            <Row gutter={[16, 16]} style={{ marginTop: 12 }}>
+              {data.items.map((it) => (
+                <Col xs={24} sm={12} lg={8} key={it.key}>
+                  <StaggerItem>
+                    <Card size="small" title={it.name}>
                   {it.unknown ? (
                     <Text type="secondary">查询失败，稍后重试</Text>
                   ) : (
@@ -87,10 +96,12 @@ export default function FreeTierCard({ tenantId }: { tenantId: number }) {
                       )}
                     </>
                   )}
-                </Card>
+                    </Card>
+                  </StaggerItem>
               </Col>
             ))}
           </Row>
+          </StaggerGroup>
         </>
       )}
     </Card>

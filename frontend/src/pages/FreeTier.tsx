@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Button, Card, Col, Empty, Progress, Row, Select, Space, Spin, Typography } from 'antd';
+import { Alert, Button, Card, Col, Empty, Progress, Row, Select, Skeleton, Space, Typography } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import { listTenants, type TenantOption } from '../api/tenants';
 import { getFreeTierSummary, type FreeTierSummary } from '../api/free_tier';
+import { StaggerGroup, StaggerItem } from '../components/motion';
 
 const { Text } = Typography;
 
@@ -76,7 +77,15 @@ export default function FreeTier() {
         description="按 Oracle 官方 Always Free 标准统计（2 台 AMD Micro / 4C24G ARM / 200GB 块存储 / 20GB 对象存储 / 2 个自治数据库 / 10TB 月出站流量 / 历史免费上限 1 个负载均衡器）。VCN、保留公网 IP、DNS Zone、文件系统仅统计数量（本身免费或无明确免费上限）。数据来自各服务实时查询，后端缓存 10 分钟；出站流量按实例 VNIC 监控累加估算，仅供参考。"
       />
       {loading && !data ? (
-        <div style={{ textAlign: 'center', padding: 60 }}><Spin size="large" /></div>
+        <Row gutter={[16, 16]}>
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <Col xs={24} sm={12} lg={8} key={i}>
+              <Card size="small">
+                <Skeleton active paragraph={{ rows: 1 }} title={{ width: '50%' }} />
+              </Card>
+            </Col>
+          ))}
+        </Row>
       ) : !data || data.items.length === 0 ? (
         <Empty description="暂无数据，请先选择租户" />
       ) : (
@@ -85,10 +94,12 @@ export default function FreeTier() {
             统计时间：{new Date(data.generated_at).toLocaleString('zh-CN', { hour12: false })}
             {data.cached ? '（缓存）' : ''}
           </Text>
-          <Row gutter={[16, 16]} style={{ marginTop: 12 }}>
-            {data.items.map((it) => (
-              <Col xs={24} sm={12} lg={8} key={it.key}>
-                <Card size="small" title={it.name}>
+          <StaggerGroup>
+            <Row gutter={[16, 16]} style={{ marginTop: 12 }}>
+              {data.items.map((it) => (
+                <Col xs={24} sm={12} lg={8} key={it.key}>
+                  <StaggerItem>
+                    <Card size="small" title={it.name}>
                   {it.unknown ? (
                     <Text type="secondary">查询失败，稍后重试</Text>
                   ) : (
@@ -124,10 +135,12 @@ export default function FreeTier() {
                       )}
                     </>
                   )}
-                </Card>
+                    </Card>
+                  </StaggerItem>
               </Col>
             ))}
           </Row>
+          </StaggerGroup>
         </>
       )}
     </Card>

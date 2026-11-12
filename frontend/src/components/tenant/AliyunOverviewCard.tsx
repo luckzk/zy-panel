@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Card, Col, Empty, Row, Spin, Statistic, Typography } from 'antd';
+import { Card, Col, Empty, Row, Skeleton, Statistic, Typography } from 'antd';
 import { getAliyunOverview, type AliyunOverview } from '../../api/aliyun';
 
 const { Text } = Typography;
@@ -33,9 +33,7 @@ export default function AliyunOverviewCard({ tenantId }: { tenantId: number }) {
   return (
     <Card title="账户与费用">
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 40 }}>
-          <Spin />
-        </div>
+        <Skeleton active paragraph={{ rows: 3 }} />
       ) : !data ? (
         <Empty description="总览获取失败，稍后重试" />
       ) : (
