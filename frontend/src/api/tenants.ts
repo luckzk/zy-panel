@@ -147,3 +147,23 @@ export async function detectAccountType(id: number): Promise<DetectAccountTypeRe
   const resp = await api.post(`/api/v1/tenants/${id}/detect-account-type`);
   return resp.data as DetectAccountTypeResult;
 }
+
+/** 区域订阅（仅 OCI） */
+export interface RegionSubscription {
+  region_key: string; // 三字码，如 SYD
+  region_name: string; // 地域标识，如 ap-sydney-1
+  status: string; // READY / IN_PROGRESS
+  is_home_region: boolean;
+}
+export interface RegionSubscriptionsResult {
+  subscribed: RegionSubscription[];
+  available: { region_key: string; region_name: string }[];
+}
+export async function listRegionSubscriptions(id: number): Promise<RegionSubscriptionsResult> {
+  const resp = await api.get(`/api/v1/tenants/${id}/region-subscriptions`);
+  return resp.data as RegionSubscriptionsResult;
+}
+export async function subscribeRegion(id: number, regionKey: string): Promise<RegionSubscription> {
+  const resp = await api.post(`/api/v1/tenants/${id}/region-subscriptions`, { region_key: regionKey });
+  return resp.data as RegionSubscription;
+}

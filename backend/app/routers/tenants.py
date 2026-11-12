@@ -14,6 +14,8 @@ from ..core.audit import write_log
 from ..core.deps import get_current_user, get_db
 from ..core.response import err, ok
 from ..db import models
+from ..services import region_subscription_service
+from ..services.instance_service import OciApiError
 from ..services.oci_factory import encrypt_private_key, get_identity_client, invalidate_tenant_cache
 
 router = APIRouter(prefix="/tenants", tags=["租户配置"])
@@ -295,6 +297,55 @@ def detect_account_type(
             db.rollback()
     write_log(db, user.id, "tenant.detect_account_type", f"检测租户 {tenant.name} 账号类型：{detected}")
     return ok(result)
+
+
+class RegionSubscribeIn(BaseModel):
+    region_key: str
+
+
+@router.get("/{tenant_id}/region-subscriptions", summary="区域订阅：已订阅 + 可订阅（仅 OCI）")
+def region_subscriptions(
+    tenant_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    tenant = db.get(models.Tenant, tenant_id)
+    if tenant is None:
+        return err(2001, "租户不存在", status=404)
+    if (getattr(tenant, "provider", None) or "oci") != "oci":
+        return err(3002, "区域订阅仅支持 OCI 租户", status=400)
+    try:
+        return ok(region_subscription_service.list_region_subscriptions(tenant))
+    except OciApiError as exc:
+        return err(exc.code, exc.message, status=exc.http_status)
+    except Exception as exc:
+        log.exception("区域订阅查询异常 tenant_id=%s", tenant_id)
+        return err(3100, f"查询失败：{str(exc)[:200]}", status=500)
+
+
+@router.post("/{tenant_id}/region-subscriptions", summary="订阅新区域（仅 OCI，写操作记审计）")
+def subscribe_region(
+    tenant_id: int,
+    body: RegionSubscribeIn,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    tenant = db.get(models.Tenant, tenant_id)
+    if tenant is None:
+        return err(2001, "租户不存在", status=404)
+    if (getattr(tenant, "provider", None) or "oci") != "oci":
+        return err(3002, "区域订阅仅支持 OCI 租户", status=400)
+    if not (body.region_key or "").strip():
+        return err(3002, "region_key 不能为空", status=400)
+    try:
+        result = region_subscription_service.subscribe_region(tenant, body.region_key.strip())
+        write_log(db, user.id, "tenant.subscribe_region", f"租户 {tenant.name} 订阅区域 {body.region_key}")
+        return ok(result)
+    except OciApiError as exc:
+        return err(exc.code, exc.message, status=exc.http_status)
+    except Exception as exc:
+        log.exception("订阅区域异常 tenant_id=%s", tenant_id)
+        return err(3100, f"订阅失败：{str(exc)[:200]}", status=500)
 
 
 @router.post("/{tenant_id}/test", summary="连通性测试（按云厂商分发）")

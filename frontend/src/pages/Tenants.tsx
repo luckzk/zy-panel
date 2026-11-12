@@ -26,6 +26,9 @@ import {
   deleteTenant,
   detectAccountType,
   getTenantList,
+  listRegionSubscriptions,
+  subscribeRegion,
+  type RegionSubscription,
   testTenantConnection,
   updateTenant,
   type TenantCreateInput,
@@ -287,6 +290,42 @@ export default function Tenants() {
     }
   };
 
+  /** 区域订阅弹窗（仅 OCI）：已订阅列表 + 订阅新区域 */
+  const [regionModal, setRegionModal] = useState<{
+    tenant: TenantDetail;
+    subscribed: RegionSubscription[];
+    available: { region_key: string; region_name: string }[];
+  } | null>(null);
+  const [regionLoading, setRegionLoading] = useState(false);
+  const [regionToAdd, setRegionToAdd] = useState<string | undefined>(undefined);
+  const [subscribing, setSubscribing] = useState(false);
+  const openRegionModal = async (record: TenantDetail) => {
+    setRegionLoading(true);
+    setRegionModal({ tenant: record, subscribed: [], available: [] });
+    setRegionToAdd(undefined);
+    try {
+      const r = await listRegionSubscriptions(record.id);
+      setRegionModal({ tenant: record, subscribed: r.subscribed, available: r.available });
+    } catch {
+      setRegionModal(null); // 错误已由拦截器提示
+    } finally {
+      setRegionLoading(false);
+    }
+  };
+  const doSubscribe = async () => {
+    if (!regionModal || !regionToAdd) return;
+    setSubscribing(true);
+    try {
+      await subscribeRegion(regionModal.tenant.id, regionToAdd);
+      message.success(`已提交订阅，新区域状态为 IN_PROGRESS，几分钟后变为 READY`);
+      setRegionToAdd(undefined);
+      const r = await listRegionSubscriptions(regionModal.tenant.id);
+      setRegionModal({ tenant: regionModal.tenant, subscribed: r.subscribed, available: r.available });
+    } finally {
+      setSubscribing(false);
+    }
+  };
+
   const columns: ColumnsType<TenantDetail> = [
     { title: '名称', dataIndex: 'name', key: 'name', width: 140 },
     {
@@ -374,12 +413,17 @@ export default function Tenants() {
     {
       title: '操作',
       key: 'action',
-      width: 230,
+      width: 300,
       render: (_, record) => (
         <Space>
           <Button type="link" size="small" onClick={() => testConnection(record)}>
             测试连接
           </Button>
+          {(record.provider || 'oci') === 'oci' && (
+            <Button type="link" size="small" onClick={() => openRegionModal(record)}>
+              订阅区域
+            </Button>
+          )}
           <Button type="link" size="small" onClick={() => openModal(record)}>
             编辑
           </Button>
@@ -582,6 +626,59 @@ export default function Tenants() {
               {detectResult.reasons.map((x, i) => <li key={i} style={{ fontSize: 13 }}>{x}</li>)}
             </ul>
           </div>
+        )}
+      </Modal>
+      <Modal
+        title={regionModal ? `「${regionModal.tenant.name}」区域订阅` : '区域订阅'}
+        open={regionModal !== null}
+        onCancel={() => setRegionModal(null)}
+        footer={null}
+        width={560}
+        destroyOnClose
+      >
+        {regionModal && (
+          <Space direction="vertical" style={{ width: '100%' }}>
+            <div>
+              <Text strong>已订阅（{regionModal.subscribed.length}）</Text>
+              <div style={{ marginTop: 8 }}>
+                {regionLoading ? (
+                  <Text type="secondary">加载中…</Text>
+                ) : (
+                  regionModal.subscribed.map((r) => (
+                    <div key={r.region_key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
+                      <Text>{REGION_CN[r.region_name] ? `${REGION_CN[r.region_name]} · ${r.region_name}` : r.region_name}</Text>
+                      {r.is_home_region && <Tag color="blue">主区域</Tag>}
+                      <Tag color={r.status === 'READY' ? 'green' : 'gold'}>{r.status}</Tag>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+            <div>
+              <Text strong>订阅新区域</Text>
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <Select
+                  showSearch
+                  allowClear
+                  placeholder="选择区域"
+                  value={regionToAdd}
+                  onChange={setRegionToAdd}
+                  style={{ flex: 1 }}
+                  loading={regionLoading}
+                  options={regionModal.available.map((r) => ({
+                    value: r.region_key,
+                    label: REGION_CN[r.region_name] ? `${REGION_CN[r.region_name]} · ${r.region_name}` : r.region_name,
+                  }))}
+                />
+                <Button type="primary" disabled={!regionToAdd} loading={subscribing} onClick={doSubscribe}>
+                  订阅
+                </Button>
+              </div>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                订阅本身不收费；新区域状态先为 IN_PROGRESS，几分钟后变为 READY 才能使用。免费号在非主区域无法使用 Always Free 资源。
+              </Text>
+            </div>
+          </Space>
         )}
       </Modal>
       <TenantApiGuide open={guideOpen} onClose={() => setGuideOpen(false)} />
