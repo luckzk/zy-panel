@@ -317,6 +317,7 @@ def region_subscriptions(
     try:
         return ok(region_subscription_service.list_region_subscriptions(tenant))
     except OciApiError as exc:
+        log.warning("区域订阅查询失败 tenant_id=%s code=%s msg=%s", tenant_id, exc.code, exc.message)
         return err(exc.code, exc.message, status=exc.http_status)
     except Exception as exc:
         log.exception("区域订阅查询异常 tenant_id=%s", tenant_id)
@@ -342,6 +343,7 @@ def subscribe_region(
         write_log(db, user.id, "tenant.subscribe_region", f"租户 {tenant.name} 订阅区域 {body.region_key}")
         return ok(result)
     except OciApiError as exc:
+        log.warning("订阅区域失败 tenant_id=%s region=%s code=%s msg=%s", tenant_id, body.region_key, exc.code, exc.message)
         return err(exc.code, exc.message, status=exc.http_status)
     except Exception as exc:
         log.exception("订阅区域异常 tenant_id=%s", tenant_id)
