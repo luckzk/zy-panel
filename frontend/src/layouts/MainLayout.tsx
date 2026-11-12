@@ -34,7 +34,7 @@ const { Header, Sider, Content } = Layout;
 interface MenuEntry { key: string; label: string; icon: React.ReactNode }
 const MENU_COMMON: MenuEntry[] = [
   { key: '/dashboard', label: '总览', icon: <DashboardOutlined /> },
-  { key: '/tenants', label: '租户配置', icon: <UserOutlined /> },
+  { key: '/tenants', label: '租户管理', icon: <UserOutlined /> },
   { key: '/iam', label: 'IAM 用户', icon: <TeamOutlined /> },
   { key: '/instances', label: '实例管理', icon: <CloudServerOutlined /> },
   { key: '/scheduled-tasks', label: '定时任务', icon: <CalendarOutlined /> },
@@ -71,7 +71,7 @@ const MENU_ITEMS: MenuEntry[] = [...MENU_COMMON, ...MENU_OCI, ...MENU_ALIYUN, ..
 /** 面包屑文案映射 */
 const CRUMB_MAP: Record<string, string> = {
   dashboard: '总览',
-  tenants: '租户配置',
+  tenants: '租户管理',
   instances: '实例管理',
   'snatch-tasks': '抢机任务',
   'spot-instances': '抢占式实例',
@@ -114,7 +114,10 @@ export default function MainLayout() {
       location.pathname
         .split('/')
         .filter(Boolean)
-        .map((p) => CRUMB_MAP[p] ?? p),
+        .map((p, i, arr) =>
+          // /tenants/:id 的数字段显示为“租户详情”，而不是裸 id
+          /^\d+$/.test(p) && arr[i - 1] === 'tenants' ? '租户详情' : (CRUMB_MAP[p] ?? p),
+        ),
     [location.pathname],
   );
 

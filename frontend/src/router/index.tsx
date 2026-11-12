@@ -5,6 +5,7 @@ import MainLayout from '../layouts/MainLayout';
 import Login from '../pages/Login';
 import Dashboard from '../pages/Dashboard';
 import Tenants from '../pages/Tenants';
+import TenantDetail from '../pages/TenantDetail';
 import Instances from '../pages/Instances';
 import InstanceDetail from '../pages/InstanceDetail';
 import SnatchTasks from '../pages/SnatchTasks';
@@ -53,6 +54,7 @@ export const router = createBrowserRouter([
       { index: true, element: <Navigate to="/dashboard" replace /> },
       { path: 'dashboard', element: <Dashboard /> },
       { path: 'tenants', element: <Tenants /> },
+      { path: 'tenants/:id', element: <TenantDetail /> },
       { path: 'instances', element: <Instances /> },
       { path: 'instances/:id', element: <InstanceDetail /> },
       { path: 'snatch-tasks', element: <SnatchTasks /> },

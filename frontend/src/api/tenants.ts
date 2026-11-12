@@ -103,6 +103,12 @@ export async function getTenantList(): Promise<TenantDetail[]> {
   return Array.isArray(data) ? (data as TenantDetail[]) : [];
 }
 
+/** 单个租户详情 */
+export async function getTenant(id: number): Promise<TenantDetail> {
+  const resp = await api.get(`/api/v1/tenants/${id}`);
+  return resp.data as TenantDetail;
+}
+
 /** 新建租户 */
 export async function createTenant(body: TenantCreateInput): Promise<void> {
   await api.post('/api/v1/tenants', body);
