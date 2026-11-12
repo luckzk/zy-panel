@@ -183,7 +183,7 @@ function buildLiveCards(ov: DashboardOverview): StatCardData[] {
   return [
     { key: 'instances', title: '实例总数', value: ov.instances.total, live: true, trend, spark: flat(ov.instances.total), gradient: 'linear-gradient(135deg,#2f6df6,#6aa1ff)' },
     { key: 'running', title: '运行中', value: ov.instances.running, live: true, trend, spark: flat(ov.instances.running), gradient: 'linear-gradient(135deg,#12b76a,#5eeaa8)' },
-    { key: 'tenants', title: '租户配置', value: ov.tenants, live: true, trend, spark: flat(ov.tenants), gradient: 'linear-gradient(135deg,#7a5af8,#b692f6)' },
+    { key: 'tenants', title: '租户管理', value: ov.tenants, live: true, trend, spark: flat(ov.tenants), gradient: 'linear-gradient(135deg,#7a5af8,#b692f6)' },
     { key: 'snatch', title: '进行中抢机任务', value: ov.snatch.running, live: true, trend, spark: flat(ov.snatch.running), gradient: 'linear-gradient(135deg,#f79009,#fdb022)' },
     { key: 'changeIp', title: '今日换 IP', value: ov.ip_changes_today, live: true, trend, spark: flat(ov.ip_changes_today), gradient: 'linear-gradient(135deg,#0e9fd8,#53c8f5)' },
     { key: 'snatchSuccess', title: '抢机成功', value: ov.snatch.success, live: true, trend, spark: flat(ov.snatch.success), gradient: 'linear-gradient(135deg,#ee46bc,#f9a8d4)' },

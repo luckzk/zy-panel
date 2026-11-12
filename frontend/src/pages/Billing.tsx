@@ -139,7 +139,7 @@ export default function Billing() {
 
       {!tenantId ? (
         <Card>
-          <Empty description="请先在租户配置中添加租户" />
+          <Empty description="请先在租户管理中添加租户" />
         </Card>
       ) : isAliyun ? (
         <AliyunBillingView tenantId={tenantId} />
