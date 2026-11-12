@@ -46,6 +46,46 @@ HELP = """🤖 zy-panel 操作机器人
 菜单里还有：创建实例、引导卷、任务启停、一键测活、资源监控、
 日志查询、AI 聊天、MFA、VNC、备份恢复、IP 黑名单、防御模式。"""
 
+# 输入框左侧 ☰ 菜单按钮里的命令列表：轮询线程启动时调 setMyCommands 注册一次
+BOT_COMMANDS = [
+    {"command": "start", "description": "打开主菜单"},
+    {"command": "instances", "description": "查看全部实例列表"},
+    {"command": "instance", "description": "查看实例详情（/instance 关键词）"},
+    {"command": "snatch", "description": "查看抢机任务"},
+    {"command": "traffic", "description": "查看实例 24h 流量"},
+    {"command": "startvm", "description": "开机（/startvm 关键词）"},
+    {"command": "stopvm", "description": "关机（/stopvm 关键词）"},
+    {"command": "rebootvm", "description": "重启（/rebootvm 关键词）"},
+    {"command": "changeip", "description": "更换公网 IP（/changeip 关键词）"},
+    {"command": "ssh", "description": "在实例上执行命令（/ssh 命令）"},
+    {"command": "exit", "description": "退出当前输入"},
+    {"command": "help", "description": "查看帮助"},
+]
+
+_commands_set_token: str | None = None
+
+
+def _set_bot_commands(token: str) -> None:
+    """向 Telegram 注册命令列表，客户端输入框左侧出现 ☰ 菜单按钮。
+    同一 token 只注册一次；失败只记日志，不影响轮询。"""
+    global _commands_set_token
+    if _commands_set_token == token:
+        return
+    try:
+        resp = httpx.post(
+            _API.format(token=token, method="setMyCommands"),
+            json={"commands": BOT_COMMANDS},
+            timeout=15,
+        )
+        data = resp.json()
+        if data.get("ok"):
+            _commands_set_token = token
+            log.info("TG 菜单命令已注册（%d 条）", len(BOT_COMMANDS))
+        else:
+            log.warning("TG setMyCommands 失败: %s", data)
+    except Exception as exc:
+        log.warning("TG setMyCommands 异常: %s", exc)
+
 
 def _get_setting(db, key: str, default: str = "") -> str:
     row = db.get(models.SystemSetting, key)
@@ -290,6 +330,7 @@ def _loop():
             time.sleep(10)
             continue
         token, allow = cfg["token"], set(cfg["chat_ids"])
+        _set_bot_commands(token)
         try:
             resp = httpx.post(
                 _API.format(token=token, method="getUpdates"),

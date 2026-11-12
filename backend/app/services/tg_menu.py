@@ -331,19 +331,14 @@ def _instance_list(token: str, chat_id: str, message_id: int | None, tenant_id: 
         return
     sess = _session(chat_id)
     sess["ctx"]["inst_list"] = [{"tenant_id": tenant.id, "tenant_name": tenant.name, **it} for it in items[:10]]
+    # 实例名常很长且前缀相同：每行只放一个按钮，名字放到 30 字，避免截断后长得一样
     rows: list[list[tuple[str, str]]] = []
-    row: list[tuple[str, str]] = []
     for idx, it in enumerate(sess["ctx"]["inst_list"]):
         state = (it.get("lifecycle_state") or "")
         emoji = "🟢" if state == "RUNNING" else "🔴" if state in ("STOPPED", "STOPPING") else "🟡"
-        name = (it.get("display_name") or it.get("id", ""))[:14]
+        name = (it.get("display_name") or it.get("id", ""))[:30]
         ref = _put_ref(chat_id, {"tenant_id": tenant.id, "idx": idx})
-        row.append((f"{emoji} {name}", f"{prefix}:{ref}"))
-        if len(row) == 2:
-            rows.append(row)
-            row = []
-    if row:
-        rows.append(row)
+        rows.append([(f"{emoji} {name}", f"{prefix}:{ref}")])
     if len(items) > 10:
         rows.append([("…", "noop")])
     rows.append([("◀️ 返回主菜单", "menu")])
