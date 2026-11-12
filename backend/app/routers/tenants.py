@@ -5,7 +5,7 @@
 """
 import logging
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from oci.exceptions import ConnectTimeout, RequestException, ServiceError
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -14,7 +14,7 @@ from ..core.audit import write_log
 from ..core.deps import get_current_user, get_db
 from ..core.response import err, ok
 from ..db import models
-from ..services import region_subscription_service
+from ..services import region_subscription_service, tenant_overview_service
 from ..services.instance_service import OciApiError
 from ..services.oci_factory import encrypt_private_key, get_identity_client, invalidate_tenant_cache
 
@@ -301,6 +301,54 @@ def detect_account_type(
 
 class RegionSubscribeIn(BaseModel):
     region_key: str
+
+
+@router.get("/{tenant_id}/overview", summary="租户总览（仅 OCI，只读聚合）")
+def tenant_overview(
+    tenant_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    tenant = db.get(models.Tenant, tenant_id)
+    if tenant is None:
+        return err(2001, "租户不存在", status=404)
+    if (getattr(tenant, "provider", None) or "oci") != "oci":
+        return err(3002, "总览仅支持 OCI 租户", status=400)
+    try:
+        return ok(tenant_overview_service.get_overview(tenant))
+    except Exception as exc:
+        log.exception("租户总览异常 tenant_id=%s", tenant_id)
+        return err(3100, f"查询失败：{str(exc)[:200]}", status=500)
+
+
+@router.get("/{tenant_id}/recent-operations", summary="最近操作记录（按租户名匹配审计日志，仅供参考）")
+def recent_operations(
+    tenant_id: int,
+    limit: int = Query(default=10, ge=1, le=50),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    tenant = db.get(models.Tenant, tenant_id)
+    if tenant is None:
+        return err(2001, "租户不存在", status=404)
+    rows = (
+        db.query(models.OperationLog, models.User.username.label("username"))
+        .outerjoin(models.User, models.User.id == models.OperationLog.user_id)
+        .filter(models.OperationLog.detail.like(f"%{tenant.name}%"))
+        .order_by(models.OperationLog.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return ok([
+        {
+            "id": l.id,
+            "action": l.action,
+            "detail": l.detail,
+            "username": username,
+            "created_at": l.created_at.isoformat() if l.created_at else None,
+        }
+        for l, username in rows
+    ])
 
 
 @router.get("/{tenant_id}/region-subscriptions", summary="区域订阅：已订阅 + 可订阅（仅 OCI）")

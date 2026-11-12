@@ -393,6 +393,45 @@ def billing_summary(
     return ok({"balance": balance, "bill": bill})
 
 
+@router.get("/overview", summary="租户总览（余额 + 当月账单 + 默认地域资源数，只读）")
+def aliyun_overview(
+    tenant_id: int = Query(description="租户 ID（必填）"),
+    _user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    tenant = db.get(models.Tenant, tenant_id)
+    if tenant is None:
+        return err(2001, "租户不存在", status=404)
+    p, e = _get_aliyun(db, tenant_id)
+    if e:
+        return e
+    try:
+        balance = p.get_account_balance()
+    except Exception as exc:
+        log.warning("阿里云余额查询失败: %s", exc)
+        balance = None
+    try:
+        bill = p.get_month_bill()
+    except Exception as exc:
+        log.warning("阿里云账单查询失败: %s", exc)
+        bill = None
+
+    def _count(fn, label: str):
+        try:
+            return len(fn())
+        except Exception as exc:
+            log.warning("阿里云%s查询失败: %s", label, exc)
+            return None
+
+    resources = {
+        "instances": _count(lambda: p.list_instances(), "实例"),
+        "rds": _count(lambda: p.list_db_instances(), "RDS"),
+        "vpcs": _count(lambda: p.list_vpcs(), "VPC"),
+        "buckets": _count(lambda: p.list_buckets(), "OSS"),
+    }
+    return ok({"region": tenant.region or "", "balance": balance, "bill": bill, "resources": resources})
+
+
 # ---------------- 抢占式任务支持数据 ----------------
 @router.get("/instance-types", summary="实例规格列表")
 def list_instance_types(
