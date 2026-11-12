@@ -173,3 +173,50 @@ export async function subscribeRegion(id: number, regionKey: string): Promise<Re
   const resp = await api.post(`/api/v1/tenants/${id}/region-subscriptions`, { region_key: regionKey });
   return resp.data as RegionSubscription;
 }
+
+/** 租户总览（仅 OCI，只读聚合；各小节失败时为 null） */
+export interface TenantOverviewResources {
+  instances_total: number;
+  micro_count: number;
+  a1_ocpu: number;
+  a1_memory_gb: number;
+  paid_shapes: string[];
+  block_storage_gb: number;
+  adb_count: number;
+  vcn_count: number;
+}
+export interface TenantOverviewQuotas {
+  micro_limit: number | null;
+  a1_core_limit: number | null;
+  e2_core_limit: number | null;
+  e3_core_limit: number | null;
+  e4_core_limit: number | null;
+  e5_core_limit: number | null;
+  e6_core_limit: number | null;
+  subscribed_region_limit: number | null;
+}
+export interface TenantOverview {
+  tenancy_name: string | null;
+  availability_domains: string[] | null;
+  compartments: { id: string; name: string }[] | null;
+  resources: TenantOverviewResources | null;
+  quotas: TenantOverviewQuotas | null;
+  iam: { users: number; groups: number } | null;
+}
+export async function getTenantOverview(id: number): Promise<TenantOverview> {
+  const resp = await api.get(`/api/v1/tenants/${id}/overview`);
+  return resp.data as TenantOverview;
+}
+
+/** 最近操作记录（按租户名匹配审计日志，仅供参考） */
+export interface RecentOperation {
+  id: number;
+  action: string;
+  detail: string | null;
+  username: string | null;
+  created_at: string | null;
+}
+export async function getTenantRecentOperations(id: number, limit = 10): Promise<RecentOperation[]> {
+  const resp = await api.get(`/api/v1/tenants/${id}/recent-operations`, { params: { limit } });
+  return resp.data as RecentOperation[];
+}

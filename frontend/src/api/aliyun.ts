@@ -151,6 +151,18 @@ export async function getAliBilling(tenantId: number): Promise<AliBilling> {
   return resp.data as AliBilling;
 }
 
+/** 租户总览（余额 + 当月账单 + 默认地域资源数，只读；各小节失败时为 null） */
+export interface AliyunOverview {
+  region: string;
+  balance: { available_amount: string; credit_amount: string; currency: string } | null;
+  bill: { billing_cycle: string; total: number; products: { product: string; product_code: string; amount: number; currency: string }[]; error?: string } | null;
+  resources: { instances: number | null; rds: number | null; vpcs: number | null; buckets: number | null };
+}
+export async function getAliyunOverview(tenantId: number): Promise<AliyunOverview> {
+  const resp = await api.get('/api/v1/aliyun/overview', { params: { tenant_id: tenantId } });
+  return resp.data as AliyunOverview;
+}
+
 /** 实例规格 / 交换机 */
 export interface AliInstanceType { id: string; cpu: number; memory_gb: number; family: string }
 export interface AliVSwitch { id: string; name: string; zone_id: string; cidr: string; vpc_id: string }

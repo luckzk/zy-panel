@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import {
   Button,
@@ -17,16 +17,23 @@ import {
 import { REGION_CN } from '../types';
 import { getProviderMeta } from '../providers/registry';
 import RegionSubscriptions from '../components/RegionSubscriptions';
+import TenantOverviewCard from '../components/tenant/TenantOverviewCard';
+import FreeTierCard from '../components/tenant/FreeTierCard';
+import BillingCard from '../components/tenant/BillingCard';
+import AliyunOverviewCard from '../components/tenant/AliyunOverviewCard';
+import RecentOperations from '../components/tenant/RecentOperations';
 import {
   detectAccountType,
   getTenant,
+  getTenantOverview,
   testTenantConnection,
   type TenantDetail,
+  type TenantOverview,
 } from '../api/tenants';
 
 const { Text, Title } = Typography;
 
-/** 租户详情页：基本信息 + 账号检测/连通性操作 + 区域订阅（仅 OCI） */
+/** 租户详情页：基本信息 + 资源概览/配额 + 免费额度 + 费用 + 区域订阅 + 最近操作 */
 export default function TenantDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -35,6 +42,8 @@ export default function TenantDetailPage() {
   const [testing, setTesting] = useState(false);
   const [detecting, setDetecting] = useState(false);
   const [detectResult, setDetectResult] = useState<{ label: string; reasons: string[] } | null>(null);
+  const [overview, setOverview] = useState<TenantOverview | null>(null);
+  const [overviewLoading, setOverviewLoading] = useState(false);
 
   const fetchOne = useCallback(async () => {
     if (!id) return;
@@ -51,6 +60,26 @@ export default function TenantDetailPage() {
   useEffect(() => {
     fetchOne();
   }, [fetchOne]);
+
+  /** OCI 总览（资源/配额/可用域/Compartment/IAM）：独立加载，不挡基本信息 */
+  useEffect(() => {
+    if (!tenant || (tenant.provider || 'oci') !== 'oci') return;
+    let cancelled = false;
+    setOverviewLoading(true);
+    getTenantOverview(tenant.id)
+      .then((o) => {
+        if (!cancelled) setOverview(o);
+      })
+      .catch(() => {
+        if (!cancelled) setOverview(null); // 错误已由拦截器提示
+      })
+      .finally(() => {
+        if (!cancelled) setOverviewLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tenant]);
 
   /** 测试连接：调用真实 OCI/阿里云校验 */
   const testConnection = async () => {
@@ -126,6 +155,37 @@ export default function TenantDetailPage() {
         {statusTag}
       </div>
 
+      <Space wrap>
+        <Link to="/instances">
+          <Button size="small">查看实例</Button>
+        </Link>
+        {isOci ? (
+          <>
+            <Link to="/iam">
+              <Button size="small">IAM 用户</Button>
+            </Link>
+            <Link to="/billing">
+              <Button size="small">费用分析</Button>
+            </Link>
+            <Link to="/free-tier">
+              <Button size="small">免费额度</Button>
+            </Link>
+          </>
+        ) : (
+          <>
+            <Link to="/aliyun-vpc">
+              <Button size="small">VPC / 交换机</Button>
+            </Link>
+            <Link to="/aliyun-oss">
+              <Button size="small">OSS 对象存储</Button>
+            </Link>
+            <Link to="/aliyun-rds">
+              <Button size="small">RDS 数据库</Button>
+            </Link>
+          </>
+        )}
+      </Space>
+
       <Card
         title="基本信息"
         extra={
@@ -170,6 +230,9 @@ export default function TenantDetailPage() {
           </Descriptions.Item>
           {isOci && (
             <>
+              <Descriptions.Item label="Oracle 租户名">
+                {overviewLoading ? '加载中…' : overview?.tenancy_name || '—'}
+              </Descriptions.Item>
               <Descriptions.Item label="User OCID">
                 <Text copyable>{tenant.user_ocid}</Text>
               </Descriptions.Item>
@@ -185,11 +248,21 @@ export default function TenantDetailPage() {
         </Descriptions>
       </Card>
 
+      {isOci && <TenantOverviewCard overview={overview} loading={overviewLoading} />}
+
+      {!isOci && <AliyunOverviewCard tenantId={tenant.id} />}
+
+      {isOci && <FreeTierCard tenantId={tenant.id} />}
+
+      {isOci && <BillingCard tenantId={tenant.id} />}
+
       {isOci && (
         <Card title="区域订阅">
           <RegionSubscriptions tenantId={tenant.id} />
         </Card>
       )}
+
+      <RecentOperations tenantId={tenant.id} />
 
       <Modal
         title={detectResult ? `检测结果：${detectResult.label}` : '检测结果'}
