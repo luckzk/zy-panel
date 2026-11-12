@@ -295,6 +295,7 @@ export default function Dashboard() {
   const shapeData = useMemo(() => overview?.instances.by_shape ?? [], [overview]);
 
   const bannerSub = useMemo(() => {
+    if (loading) return '数据加载中…';
     if (!tenants.length) return '还没有配置 OCI 租户，先去添加一个吧';
     if (!overview) return '数据加载中…';
     const parts = [
@@ -305,7 +306,7 @@ export default function Dashboard() {
     if (overview.errors.length > 0) parts.push(`${overview.errors.length} 个租户查询失败`);
     else parts.push('一切正常');
     return parts.join('，');
-  }, [overview, tenants]);
+  }, [loading, overview, tenants]);
 
   const trafficOption = useMemo<EChartsOption>(
     () => ({
@@ -400,17 +401,8 @@ export default function Dashboard() {
         </Row>
       </Card>
 
-      {loading ? (
-        <Row gutter={16}>
-          {[0, 1, 2, 3, 4, 5].map((i) => (
-            <Col key={i} xs={12} sm={12} md={8} lg={4}>
-              <FutCard bodyStyle={{ padding: 16 }}>
-                <Skeleton active paragraph={{ rows: 1 }} title={{ width: '60%' }} />
-              </FutCard>
-            </Col>
-          ))}
-        </Row>
-      ) : tenants.length === 0 ? (
+      {/* 整页骨架一次全出：加载中也渲染完整框架，各区按数据状态出骨架；仅加载完成且无租户时显示引导 */}
+      {tenants.length === 0 && !loading ? (
         <FutCard >
           <Empty
             description="还没有配置 OCI 租户，添加后这里将展示真实数据"
@@ -472,7 +464,9 @@ export default function Dashboard() {
             </Col>
             <Col xs={24} lg={8}>
               <FutCard title="实例状态分布" extra={<Tag color="green">实时数据</Tag>} >
-                {statusData.length && statusData.some((d) => d.value > 0) ? (
+                {overview === null ? (
+                  <Skeleton active paragraph={{ rows: 6 }} />
+                ) : statusData.length && statusData.some((d) => d.value > 0) ? (
                   <Chart option={statusOption} height={320} />
                 ) : (
                   <Empty description="暂无实例" style={{ padding: '40px 0' }} />
@@ -485,7 +479,9 @@ export default function Dashboard() {
           <Row gutter={16} style={{ marginTop: 16 }}>
             <Col xs={24} lg={8}>
               <FutCard title="实例 Region 分布" extra={<Tag color="green">实时数据</Tag>} >
-                {regionData.length ? (
+                {overview === null ? (
+                  <Skeleton active paragraph={{ rows: 3 }} />
+                ) : regionData.length ? (
                   <BarList data={regionData} color="#2f6df6" />
                 ) : (
                   <Empty description="暂无实例" style={{ padding: '40px 0' }} />
@@ -494,7 +490,9 @@ export default function Dashboard() {
             </Col>
             <Col xs={24} lg={8}>
               <FutCard title="实例 Shape 分布" extra={<Tag color="green">实时数据</Tag>} >
-                {shapeData.length ? (
+                {overview === null ? (
+                  <Skeleton active paragraph={{ rows: 3 }} />
+                ) : shapeData.length ? (
                   <BarList data={shapeData} color="#7a5af8" />
                 ) : (
                   <Empty description="暂无实例" style={{ padding: '40px 0' }} />
