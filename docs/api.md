@@ -367,6 +367,8 @@
 | POST | /api/v1/aliyun/instances | 新建按量付费实例 |
 
 > 注意：`GET /api/v1/aliyun/vswitches` 在代码中有两个同名同路径的处理器（分别按 `zone_id` 和 `vpc_id` 过滤），FastAPI 按注册顺序匹配，实际生效的始终是第一个（`zone_id` 版），`vpc_id` 版目前走不到，建议合并为一个处理器。
+>
+> 另：Swagger 里还多一个 `GET /` 健康检查（返回 `{"service": "zy-panel", "version": "0.1.0"}`），不属于 `/api/v1`，未列入上表；注意它返回的版本号是写死的 `0.1.0`，与真实后端版本（`0.4.14`）不一致。
 
 ## WebSocket
 
