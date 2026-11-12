@@ -8,10 +8,19 @@ OCI 没有"免费号/付费号"的官方 API。实测结论（2026-11-12，迪�
   因此：任一付费机型配额 >0 => 一定是付费号（空账号也能判定）；
   Micro=2 且付费机型配额全 0 => 符合免费版配额特征。
 - 其余仍用反向启发式：超免费额度的已有资源、非零账单 => 付费号。
+- 试用期费用（2026-11-12，悉尼号实测）：试用期的用量费会原样计入
+  COST 总额，CREDIT 查询查不到任何抵扣、overages_flag 全为空、
+  OneSubscription 同样 404，无法从单条用量区分。唯一可靠特征是
+  时间形状：费用集中在连续 <=31 天内（30 天试用期），之后长期
+  归零。悉尼号：8-14 至 9-11 共 29 天、每天约 13.7 SGD、最后一天
+  仅 0.55（额度当天耗尽），之后 62 天零费用。因此账单信号改为：
+  费用集中在 <=31 天的 burst 内且配额为免费版特征 => 试用期消耗，
+  不计为付费信号；其余有费用的情况仍判付费。
 
 结论仅供参考，用户可手动修改。
 """
 import logging
+from datetime import date
 
 from oci.exceptions import ServiceError
 
@@ -141,11 +150,27 @@ def detect_account_type(tenant: models.Tenant) -> dict:
     except Exception as exc:
         reasons.append(f"数据库检查失败：{exc}")
 
-    # 4. 近 90 天是否有非零账单
+    # 4. 近 90 天账单：只看总额会把试用期消耗误判为付费，需看时间形状
     try:
         summary = usage_service.monthly_summary(tenant, days=90)
-        if (summary.get("total") or 0) > 0:
-            paid_signals.append(f"近 90 天产生费用 {summary['total']} {summary.get('currency', '')}")
+        total = summary.get("total") or 0
+        currency = summary.get("currency", "")
+        if total > 0:
+            cost_days = sorted(
+                d["date"] for d in (summary.get("daily") or []) if (d.get("amount") or 0) > 0
+            )
+            trial_like = False
+            if len(cost_days) >= 1:
+                first, last = cost_days[0], cost_days[-1]
+                span = (date.fromisoformat(last) - date.fromisoformat(first)).days
+                trial_like = span <= 31
+            if trial_like and free_profile:
+                reasons.append(
+                    f"近 90 天用量费用 {total} {currency}，集中在 {first} 至 {last}"
+                    f"（{span + 1} 天，符合 30 天试用期特征），配额为免费版特征，未计为付费信号"
+                )
+            else:
+                paid_signals.append(f"近 90 天产生费用 {total} {currency}")
         else:
             reasons.append("近 90 天无费用")
     except Exception as exc:
