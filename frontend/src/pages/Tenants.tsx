@@ -675,7 +675,7 @@ export default function Tenants() {
                 </Button>
               </div>
               <Text type="secondary" style={{ fontSize: 12 }}>
-                订阅本身不收费；新区域状态先为 IN_PROGRESS，几分钟后变为 READY 才能使用。免费号在非主区域无法使用 Always Free 资源。
+                默认只能订阅 1 个区域（主区域）；免费号无法订阅其他区域，付费号需先在控制台申请提高区域订阅上限，否则订阅会报错。订阅本身不收费；新区域状态先为 IN_PROGRESS，几分钟后变为 READY 才能使用。
               </Text>
             </div>
           </Space>
