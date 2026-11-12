@@ -77,6 +77,7 @@ def _get_client(tenant: models.Tenant, kind: str):
         "dns": oci.dns.DnsClient,
         "filestorage": oci.file_storage.FileStorageClient,
         "database": oci.database.DatabaseClient,
+        "limits": oci.limits.LimitsClient,
     }
     if kind not in constructors:
         raise ValueError(f"未知的 OCI 服务类型: {kind}")
@@ -113,6 +114,11 @@ def get_network_load_balancer_client(tenant: models.Tenant):
 def get_database_client(tenant: models.Tenant):
     """Autonomous Database 用 client。"""
     return _get_client(tenant, "database")
+
+
+def get_limits_client(tenant: models.Tenant):
+    """服务配额（Limits）用 client。"""
+    return _get_client(tenant, "limits")
 
 
 def invalidate_tenant_cache(tenant_id: int) -> None:
