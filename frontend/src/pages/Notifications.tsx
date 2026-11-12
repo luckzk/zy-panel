@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  Alert,
   Button,
   Card,
   Form,
@@ -381,6 +382,23 @@ export default function Notifications() {
               <Form.Item name="chat_id" label="Chat ID" rules={[{ required: true, message: '请输入 Chat ID' }]}>
                 <Input placeholder="群组或个人聊天的 chat_id" />
               </Form.Item>
+              <Alert
+                type="info"
+                showIcon={false}
+                style={{ marginTop: -12, marginBottom: 24 }}
+                message="如何获取 Chat ID？"
+                description={
+                  <div style={{ fontSize: 12, lineHeight: 1.8 }}>
+                    <div>1. 个人聊天：Telegram 里搜 @userinfobot（或 @getmyid_bot），发任意消息，回复的 ID 就是 chat id。</div>
+                    <div>
+                      2. 通用方法：先给你的 bot 发条消息（群组：把 bot 拉进群并发一条消息），再在浏览器打开{' '}
+                      <Text code>https://api.telegram.org/bot&lt;你的Token&gt;/getUpdates</Text>
+                      ，在返回的 JSON 里找 <Text code>&quot;chat&quot;:&#123;&quot;id&quot;: 数字&#125;</Text>。
+                    </div>
+                    <div>3. 注意：群组和频道的 chat id 是负数（超级群以 -100 开头），填的时候负号也要带上；getUpdates 返回空时，先给 bot 发消息再查。</div>
+                  </div>
+                }
+              />
             </>
           ) : (
             <>
