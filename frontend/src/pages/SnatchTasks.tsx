@@ -415,7 +415,7 @@ export default function SnatchTasks() {
             <Input placeholder="如：东京 ARM 4C24G" />
           </Form.Item>
           <Form.Item name="tenant_id" label="租户" rules={[{ required: true, message: '请选择租户' }]}>
-            <Select options={tenants.map((t) => ({ label: `${t.name}（${t.region}）`, value: t.id }))} placeholder="先在租户配置中添加 OCI 租户" />
+            <Select options={tenants.map((t) => ({ label: `${t.name}（${t.region}）`, value: t.id }))} placeholder="先在租户管理中添加 OCI 租户" />
           </Form.Item>
           <Form.Item
             name="compartment_id"

@@ -247,7 +247,7 @@ export default function Volumes() {
   if (tenantsLoaded && tenants.length === 0) {
     return (
       <Card title="卷管理">
-        <Empty description="还没有租户配置，请先添加 OCI 租户">
+        <Empty description="还没有租户，请先添加 OCI 租户">
           <Link to="/tenants">
             <Button type="primary">去添加租户</Button>
           </Link>
