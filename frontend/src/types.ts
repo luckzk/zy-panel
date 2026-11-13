@@ -24,6 +24,7 @@ export interface Instance {
   shape: string;
   ocpus: number;
   memoryGb: number;
+  diskGb: number; // 启动卷/系统盘大小（GB），0 表示未知
   publicIp: string;
   privateIp: string;
   status: InstanceStatus;

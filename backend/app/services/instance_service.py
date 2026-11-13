@@ -60,7 +60,8 @@ def _short_ad(ad: str | None) -> str:
     return "AD-" + ad.split(":")[-1].split("-")[-1]
 
 
-def _to_out(inst, tenant: models.Tenant, vnic_map: dict, compartment_names: dict) -> dict:
+def _to_out(inst, tenant: models.Tenant, vnic_map: dict, compartment_names: dict,
+            boot_sizes: dict | None = None) -> dict:
     vnic = vnic_map.get(inst.id) or {}
     shape_cfg = inst.shape_config
     tc = inst.time_created
@@ -72,6 +73,7 @@ def _to_out(inst, tenant: models.Tenant, vnic_map: dict, compartment_names: dict
         "shape": inst.shape,
         "ocpus": getattr(shape_cfg, "ocpus", None),
         "memory_in_gbs": getattr(shape_cfg, "memory_in_gbs", None),
+        "boot_volume_size_gbs": (boot_sizes or {}).get(inst.id),
         "region": tenant.region,
         "availability_domain": _short_ad(inst.availability_domain),
         "compartment_id": inst.compartment_id,
@@ -189,6 +191,54 @@ def _get_primary_vnic_full(network, compute, instance_id: str, compartment_id: s
     }
 
 
+def _boot_volume_sizes(compute, blockstorage, instances: list) -> dict:
+    """批量取引导卷大小：{instance_id: size_in_gbs}。
+
+    按 compartment 一次拉全部引导卷（自带大小），再按 (compartment, AD) 拉挂载关系
+    拼出实例 -> 大小。list_boot_volume_attachments 必填 availability_domain，
+    故按实例实际的 (compartment, AD) 分组拉取。任一 compartment/AD 失败只降级
+    对应部分（记日志），绝不影响实例列表本身。
+    """
+    sizes: dict = {}
+    if not instances:
+        return sizes
+    # 1. 按 compartment 拉引导卷：id -> 大小
+    vol_size: dict[str, int | float] = {}
+    comp_ids = sorted({getattr(i, "compartment_id", "") for i in instances if getattr(i, "compartment_id", "")})
+    for cid in comp_ids:
+        try:
+            for bv in _paginate(blockstorage.list_boot_volumes, compartment_id=cid, limit=100):
+                size = getattr(bv, "size_in_gbs", None)
+                if getattr(bv, "id", None) and size is not None:
+                    vol_size[bv.id] = size
+        except Exception as exc:
+            log.warning("查询 compartment %s 引导卷列表失败: %s", cid, exc)
+    if not vol_size:
+        return sizes
+    # 2. 按 (compartment, AD) 拉挂载关系：instance_id -> boot_volume_id
+    pairs = sorted({(getattr(i, "compartment_id", ""), getattr(i, "availability_domain", "") or "")
+                    for i in instances})
+    for cid, ad in pairs:
+        if not cid or not ad:
+            continue
+        try:
+            atts = _paginate(
+                compute.list_boot_volume_attachments,
+                availability_domain=ad, compartment_id=cid, limit=100,
+            )
+        except Exception as exc:
+            log.warning("查询引导卷挂载失败 %s/%s: %s", cid, ad, exc)
+            continue
+        for a in atts:
+            if getattr(a, "lifecycle_state", "") != "ATTACHED":
+                continue
+            inst_id = getattr(a, "instance_id", None)
+            vol_id = getattr(a, "boot_volume_id", None)
+            if inst_id and vol_id and vol_id in vol_size:
+                sizes[inst_id] = vol_size[vol_id]
+    return sizes
+
+
 def _get_boot_volume_info(compute, blockstorage, compartment_id: str, instance_id: str,
                           availability_domain: str | None = None) -> dict | None:
     """实例引导卷：名称 + 大小（无挂载或失败时返回 None）。
@@ -287,6 +337,8 @@ def get_instance_detail(tenant: models.Tenant, instance_id: str) -> dict:
     data_volumes = _get_data_volumes(compute, blockstorage, inst.compartment_id, instance_id) if blockstorage else []
     network_bandwidth = _get_shape_bandwidth(compute, inst.compartment_id, inst.shape)
     compartment_name = _get_compartment_name(tenant, inst.compartment_id)
+    if boot_volume and boot_volume.get("size_in_gbs") is not None:
+        out["boot_volume_size_gbs"] = boot_volume["size_in_gbs"]
     out.update(
         {
             "availability_domain_full": inst.availability_domain,
@@ -474,6 +526,14 @@ def list_instances(tenant: models.Tenant) -> list[dict]:
                 # 单个 VNIC 失败不影响整体列表，只记日志
                 log.warning("获取 VNIC %s 失败: %s", vnic_id, exc.message)
 
-    items = [_to_out(i, tenant, vnic_map, comp_names) for i in all_instances]
+    # 3. 批量补引导卷大小（失败降级为空，不影响列表）
+    boot_sizes: dict = {}
+    try:
+        blockstorage = get_blockstorage_client(tenant)
+        boot_sizes = _boot_volume_sizes(compute, blockstorage, all_instances)
+    except Exception as exc:
+        log.warning("获取引导卷大小失败: %s", exc)
+
+    items = [_to_out(i, tenant, vnic_map, comp_names, boot_sizes) for i in all_instances]
     items.sort(key=lambda x: x["time_created"] or "", reverse=True)
     return items

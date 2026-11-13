@@ -69,6 +69,7 @@ class CloudInstance:
     spec: str              # Shape / 实例规格 / InstanceType
     cpu: float | None = None
     memory_gb: float | None = None
+    disk_gb: float | None = None   # 系统盘/启动卷大小（GB），如 OCI 引导卷、阿里云系统盘
     public_ip: str | None = None
     private_ip: str | None = None
     created_at: str | None = None

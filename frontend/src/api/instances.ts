@@ -19,6 +19,7 @@ interface BackendInstance {
   shape: string | null;
   ocpus: number | null;
   memory_in_gbs: number | null;
+  boot_volume_size_gbs: number | null;
   region: string;
   availability_domain: string | null;
   compartment_name: string;
@@ -55,6 +56,7 @@ function toInstance(b: BackendInstance, tenantName: string): Instance {
       shape: str(n.spec) || '-',
       ocpus: num(n.cpu),
       memoryGb: num(n.memory_gb),
+      diskGb: num(n.disk_gb),
       publicIp: str(n.public_ip),
       privateIp: str(n.private_ip),
       status: toStatus(str(n.status)),
@@ -72,6 +74,7 @@ function toInstance(b: BackendInstance, tenantName: string): Instance {
     shape: b.shape || '-',
     ocpus: b.ocpus ?? 0,
     memoryGb: b.memory_in_gbs ?? 0,
+    diskGb: b.boot_volume_size_gbs ?? 0,
     publicIp: b.public_ip || '',
     privateIp: b.private_ip || '',
     status: toStatus(b.lifecycle_state),
@@ -161,6 +164,7 @@ export async function getInstanceDetail(tenantId: number, instanceId: string): P
   });
   return {
     ...base,
+    diskGb: b.boot_volume?.size_in_gbs ?? base.diskGb,
     compartmentId: b.compartment_id ?? '',
     compartmentName: b.compartment_name ?? '',
     availabilityDomainFull: b.availability_domain_full ?? base.ad,

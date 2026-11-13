@@ -429,6 +429,17 @@ export default function Instances() {
           <Text type="secondary">-</Text>
         ),
     },
+    {
+      title: '磁盘',
+      key: 'disk',
+      width: 90,
+      render: (_, r) =>
+        r.diskGb > 0 ? (
+          <Text>{`${r.diskGb} GB`}</Text>
+        ) : (
+          <Text type="secondary">-</Text>
+        ),
+    },
     { title: '公网 IP', dataIndex: 'publicIp', key: 'publicIp', width: 130 },
     {
       title: '状态',

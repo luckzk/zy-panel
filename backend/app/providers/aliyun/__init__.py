@@ -129,6 +129,8 @@ class AliyunProvider(CloudProvider):
         pub = (pub_ips[0] if pub_ips else None) or it.get("EipAddress", {}).get("IpAddress")
         priv = (priv_ips[0] if priv_ips else None) or it.get("VpcAttributes", {}).get("PrivateIpAddress")
         vpc = it.get("VpcAttributes") or {}
+        sys_disk = it.get("SystemDisk") or {}
+        disk_size = sys_disk.get("Size")
         return CloudInstance(
             id=it.get("InstanceId", ""),
             name=it.get("InstanceName") or it.get("InstanceId", ""),
@@ -139,6 +141,7 @@ class AliyunProvider(CloudProvider):
             spec=it.get("InstanceType", ""),
             cpu=it.get("Cpu"),
             memory_gb=(it.get("Memory") / 1024) if it.get("Memory") else None,
+            disk_gb=disk_size if isinstance(disk_size, (int, float)) else None,
             public_ip=pub,
             private_ip=priv,
             created_at=it.get("CreationTime"),

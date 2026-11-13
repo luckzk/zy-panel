@@ -62,6 +62,7 @@ class OciProvider(CloudProvider):
             spec=d.get("shape") or "",
             cpu=d.get("ocpus"),
             memory_gb=d.get("memory_gb") or d.get("memoryGb"),
+            disk_gb=d.get("boot_volume_size_gbs"),
             public_ip=d.get("public_ip") or d.get("publicIp"),
             private_ip=d.get("private_ip") or d.get("privateIp"),
             created_at=d.get("created_at") or d.get("createdAt"),
