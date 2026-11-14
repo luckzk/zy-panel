@@ -10,6 +10,15 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* 侧边栏菜单滚动修复：antd 的 .ant-layout-sider-children 默认只是
+   height:100% 的普通块容器，不是 flex 列布局；MainLayout 里菜单滚动区
+   用的 flex:1 + overflowY:auto 只有在 flex 容器里才生效，否则滚动区
+   被菜单内容撑开、overflow 失效，超出 100vh 的菜单被外层裁掉且无法滚动。 */
+.ant-layout-sider-children {
+  display: flex;
+  flex-direction: column;
+}
+
 /* 实时日志终端样式 */
 .log-terminal {
   background: #0d1117;
