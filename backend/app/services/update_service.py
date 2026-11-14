@@ -32,12 +32,16 @@ APP_VERSION_FILE = os.path.join(
 FEED_KEY = "update_feed_url"
 
 # ---- GitHub 更新配置 ----
-GH_REPO_KEY = "update_github_repo"        # 形如 owner/repo
-GH_BRANCH_KEY = "update_github_branch"   # 默认 main
+GH_REPO_KEY = "update_github_repo"        # 形如 owner/repo（历史设置键，现已固定，见下）
+GH_BRANCH_KEY = "update_github_branch"   # 默认 main（历史设置键，现已固定，见下）
 GH_TOKEN_KEY = "update_github_token"     # 私有仓库用的 Token（加密存储，可选）
 GH_SHA_KEY = "update_github_last_sha"    # 上次从 GitHub 应用的 commit sha
 GH_API = "https://api.github.com"
 GH_RAW = "https://raw.githubusercontent.com"
+
+# 更新源写死为该仓库：面板只从这里更新，不再让用户填仓库/分支
+GH_FIXED_REPO = "luckzk/zy-panel"
+GH_FIXED_BRANCH = "main"
 
 # ---- 前端热更新（GitHub Actions 预构建的 dist.zip） ----
 FE_RELEASE_TAG = "frontend-latest"       # 滚动 Release 的 tag
@@ -180,10 +184,17 @@ def _get_gh_token() -> str:
         return ""
 
 
+def _gh_source() -> tuple[str, str, str]:
+    """固定更新源：luckzk/zy-panel@main。Token 仍读已存配置（公开仓库可为空，
+    有 Token 可提高 GitHub API 限额）。"""
+    owner, name = _parse_repo(GH_FIXED_REPO)
+    return owner, name, GH_FIXED_BRANCH
+
+
 def get_github_config() -> dict:
     return {
-        "repo": _get_setting(GH_REPO_KEY),
-        "branch": _get_setting(GH_BRANCH_KEY, "main"),
+        "repo": GH_FIXED_REPO,
+        "branch": GH_FIXED_BRANCH,
         "has_token": bool(_get_setting(GH_TOKEN_KEY)),
         "last_applied_sha": _get_setting(GH_SHA_KEY),
     }
@@ -251,17 +262,10 @@ def github_check() -> dict:
         "latest_sha": "", "latest_date": "", "latest_message": "",
         "remote_version": "", "has_update": False, "notes": "",
     }
-    if not cfg["repo"]:
-        result["notes"] = "未配置 GitHub 仓库地址"
-        return result
-    try:
-        owner, name = _parse_repo(cfg["repo"])
-    except ValueError as exc:
-        result["notes"] = str(exc)
-        return result
+    owner, name, branch = _gh_source()
     token = _get_gh_token()
     try:
-        info = _gh_branch_info(owner, name, cfg["branch"], token)
+        info = _gh_branch_info(owner, name, branch, token)
     except ValueError as exc:
         result["notes"] = str(exc)
         return result
@@ -270,7 +274,7 @@ def github_check() -> dict:
         "latest_date": info["date"],
         "latest_message": info["message"],
     })
-    remote_ver = _gh_remote_version(owner, name, cfg["branch"], token)
+    remote_ver = _gh_remote_version(owner, name, branch, token)
     result["remote_version"] = remote_ver
     last = cfg["last_applied_sha"]
     if last:
@@ -288,12 +292,8 @@ def github_check() -> dict:
 
 
 def github_apply() -> dict:
-    """从 GitHub 下载分支 zip 包并应用更新，成功后记录 commit sha。"""
-    cfg = get_github_config()
-    if not cfg["repo"]:
-        raise ValueError("未配置 GitHub 仓库地址")
-    owner, name = _parse_repo(cfg["repo"])
-    branch = cfg["branch"]
+    """从固定仓库下载分支 zip 包并应用更新，成功后记录 commit sha。"""
+    owner, name, branch = _gh_source()
     token = _get_gh_token()
     info = _gh_branch_info(owner, name, branch, token)  # 先拿 sha，失败直接抛
     url = f"{GH_API}/repos/{owner}/{name}/zipball/{branch}"
@@ -351,21 +351,13 @@ def _gh_dist_asset(release: dict) -> dict:
 
 def frontend_check() -> dict:
     """检查前端 dist 是否有新构建。"""
-    cfg = get_github_config()
+    owner, name, _branch = _gh_source()
     result = {
-        "repo": cfg["repo"], "release_tag": FE_RELEASE_TAG,
+        "repo": GH_FIXED_REPO, "release_tag": FE_RELEASE_TAG,
         "has_update": False, "notes": "",
         "asset_updated_at": "", "asset_size": 0,
         "applied_asset_updated_at": _get_setting(FE_UPDATED_KEY),
     }
-    if not cfg["repo"]:
-        result["notes"] = "未配置 GitHub 仓库地址"
-        return result
-    try:
-        owner, name = _parse_repo(cfg["repo"])
-    except ValueError as exc:
-        result["notes"] = str(exc)
-        return result
     try:
         asset = _gh_dist_asset(_gh_release(owner, name, _get_gh_token()))
     except ValueError as exc:
@@ -398,10 +390,7 @@ def _safe_extract(zf: zipfile.ZipFile, target: str) -> list:
 
 def frontend_apply() -> dict:
     """下载 CI 构建的 dist.zip 并热更到前端目录（nginx 即时生效，无需重建）。"""
-    cfg = get_github_config()
-    if not cfg["repo"]:
-        raise ValueError("未配置 GitHub 仓库地址")
-    owner, name = _parse_repo(cfg["repo"])
+    owner, name, _branch = _gh_source()
     token = _get_gh_token()
     asset = _gh_dist_asset(_gh_release(owner, name, token))
     # 走 API asset 地址 + octet-stream（公开/私有仓库通用，token 自动处理）
@@ -447,6 +436,29 @@ def frontend_apply() -> dict:
         "target_dir": target,
         "notes": "前端静态文件已热更，刷新浏览器即生效（如仍显示旧页面请 Ctrl+Shift+R 硬刷新）",
     }
+
+
+# ============ 一键更新前后端 ============
+
+def all_check() -> dict:
+    """一次检查前后端更新。"""
+    return {"backend": github_check(), "frontend": frontend_check()}
+
+
+def all_apply(update_backend: bool = True, update_frontend: bool = True) -> dict:
+    """一键更新前后端。顺序：先热更前端（后端还活着，nginx 立即生效），
+    再从 GitHub 更新后端并重启。前端失败则后端不动；后端失败返回部分结果
+    （前端已更新，backend_error 写明原因），调用方可只重试后端。"""
+    result: dict = {"frontend": None, "backend": None, "backend_error": "", "restart": ""}
+    if update_frontend:
+        result["frontend"] = frontend_apply()
+    if update_backend:
+        try:
+            result["backend"] = github_apply()
+            result["restart"] = result["backend"].get("restart", "")
+        except Exception as exc:
+            result["backend_error"] = str(exc)[:200]
+    return result
 
 
 def _app_root() -> str:

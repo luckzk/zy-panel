@@ -265,3 +265,41 @@ def apply_frontend_update(
         f"前端热更新至 {result['asset_updated_at']}，{result['files']} 个文件",
     )
     return ok(result)
+
+
+class AllUpdateApplyIn(BaseModel):
+    update_backend: bool = True
+    update_frontend: bool = True
+
+
+@router.get("/update/all/check", summary="一次检查前后端更新")
+def check_all_update(_user: models.User = Depends(get_current_user)):
+    from ..services import update_service
+
+    return ok(update_service.all_check())
+
+
+@router.post("/update/all/apply", summary="一键更新前后端（仅管理员）")
+def apply_all_update(
+    body: AllUpdateApplyIn,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_admin_user),
+):
+    from ..services import update_service
+
+    try:
+        result = update_service.all_apply(body.update_backend, body.update_frontend)
+    except ValueError as exc:
+        return err(7012, str(exc), status=400)
+    except Exception as exc:
+        log.exception("一键更新未知异常")
+        return err(7013, f"一键更新失败：{str(exc)[:200]}", status=500)
+    fe = result.get("frontend") or {}
+    be = result.get("backend") or {}
+    gh = be.get("github", {}) if isinstance(be, dict) else {}
+    detail = (
+        f"一键更新：前端 {'已热更' if fe.get('applied') else '跳过'}，"
+        f"后端 {'已更新至 ' + gh.get('sha', '') if gh.get('sha') else ('失败：' + result.get('backend_error', '') if result.get('backend_error') else '跳过')}"
+    )
+    write_log(db, user.id, "system.update_all_apply", detail)
+    return ok(result)

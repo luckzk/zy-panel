@@ -1,6 +1,6 @@
 # 接口文档（API 参考）
 
-> 统计时间：2026-11-12；后端 `0.4.14`；共 **241** 个 HTTP 接口 + 3 个 WebSocket 通道。
+> 统计时间：2026-11-13；后端 `0.4.18`；共 **243** 个 HTTP 接口 + 3 个 WebSocket 通道。
 > 本文档按后端路由代码生成，实时交互式文档见运行中的面板 `http://localhost:8818/docs`（Swagger，以代码为准）。
 
 ## 通用约定
@@ -306,6 +306,8 @@
 | POST | /api/v1/system/update/github/apply | 从 GitHub 拉取并应用更新（仅管理员） |
 | GET | /api/v1/system/update/frontend/check | 检查前端 dist 更新（CI 构建） |
 | POST | /api/v1/system/update/frontend/apply | 热更前端 dist（仅管理员） |
+| GET | /api/v1/system/update/all/check | 一次检查前后端更新 |
+| POST | /api/v1/system/update/all/apply | 一键更新前后端（仅管理员，先热更前端再更新后端并重启） |
 
 ## 阿里云（/api/v1/aliyun）
 

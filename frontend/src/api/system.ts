@@ -192,6 +192,37 @@ export async function applyGithubUpdate(): Promise<GithubApplyResult> {
   return resp.data as GithubApplyResult;
 }
 
+export interface AllUpdateCheck {
+  backend: GithubUpdateCheck;
+  frontend: FrontendUpdateCheck;
+}
+
+export interface AllUpdateApplyResult {
+  frontend: FrontendApplyResult | null;
+  backend: GithubApplyResult | null;
+  backend_error: string;
+  restart: string;
+}
+
+/** 一次检查前后端更新 */
+export async function checkAllUpdate(): Promise<AllUpdateCheck> {
+  const resp = await api.get('/api/v1/system/update/all/check');
+  return resp.data as AllUpdateCheck;
+}
+
+/** 一键更新前后端（先热更前端，再更新后端并重启；可单侧跳过） */
+export async function applyAllUpdate(
+  update_backend = true,
+  update_frontend = true,
+): Promise<AllUpdateApplyResult> {
+  const resp = await api.post(
+    '/api/v1/system/update/all/apply',
+    { update_backend, update_frontend },
+    { timeout: 300000 },
+  );
+  return resp.data as AllUpdateApplyResult;
+}
+
 export interface DailyReportConfig {
   enabled: boolean;
   time: string;
