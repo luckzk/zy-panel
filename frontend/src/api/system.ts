@@ -129,6 +129,8 @@ export interface GithubUpdateCheck {
   remote_version: string;
   has_update: boolean;
   notes: string;
+  /** 检查本身是否成功；失败时 has_update 不可信，前端应显示检查失败而非“已是最新” */
+  check_ok: boolean;
 }
 
 export interface GithubApplyResult extends UpdateApplyResult {
@@ -143,6 +145,8 @@ export interface FrontendUpdateCheck {
   asset_updated_at: string;
   asset_size: number;
   applied_asset_updated_at: string;
+  /** 检查本身是否成功；失败时 has_update 不可信，前端应显示检查失败而非“已是最新” */
+  check_ok: boolean;
 }
 
 export interface FrontendApplyResult {
@@ -204,9 +208,9 @@ export interface AllUpdateApplyResult {
   restart: string;
 }
 
-/** 一次检查前后端更新 */
+/** 一次检查前后端更新（后端串行调多次 GitHub，超时放宽到 120 秒） */
 export async function checkAllUpdate(): Promise<AllUpdateCheck> {
-  const resp = await api.get('/api/v1/system/update/all/check');
+  const resp = await api.get('/api/v1/system/update/all/check', { timeout: 120000 });
   return resp.data as AllUpdateCheck;
 }
 

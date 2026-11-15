@@ -251,8 +251,35 @@ def _gh_remote_version(owner: str, name: str, branch: str, token: str) -> str:
     return ""
 
 
+def _gh_backend_changed(owner: str, name: str, last_sha: str, head_sha: str, token: str) -> bool | None:
+    """比较 last_sha..head_sha 之间是否改动了 backend/ 下的文件。
+
+    返回 True/False；查不到（如 last_sha 已不在远端、改动文件超过 300 个
+    被截断）返回 None，调用方按“有更新”处理，宁可多提醒一次也不漏报。
+    """
+    url = f"{GH_API}/repos/{owner}/{name}/compare/{last_sha}...{head_sha}"
+    try:
+        resp = httpx.get(url, headers=_gh_headers(token), timeout=20, follow_redirects=True)
+    except Exception:
+        return None
+    if resp.status_code != 200:
+        return None
+    try:
+        files = resp.json().get("files") or []
+    except Exception:
+        return None
+    if len(files) >= 300:
+        return None  # compare 接口最多返回 300 个文件，可能截断
+    return any((f.get("filename") or "").startswith("backend/") for f in files)
+
+
 def github_check() -> dict:
-    """检查 GitHub 仓库是否有新提交。"""
+    """检查 GitHub 仓库是否有后端更新。
+
+    有上次应用记录时按提交比对，但只看 backend/ 是否真有改动——纯前端
+    提交（如只改前端样式）不再误报后端有更新。任何意外异常都只写 notes，
+    绝不向外抛 500，让前端能把原因显示出来。
+    """
     cfg = get_github_config()
     result = {
         "current_version": get_current_version(),
@@ -261,13 +288,25 @@ def github_check() -> dict:
         "last_applied_sha": cfg["last_applied_sha"],
         "latest_sha": "", "latest_date": "", "latest_message": "",
         "remote_version": "", "has_update": False, "notes": "",
+        "check_ok": True,
     }
+    try:
+        return _github_check_inner(cfg, result)
+    except Exception as exc:
+        result["notes"] = f"检查失败：{str(exc)[:150]}"
+        result["has_update"] = False
+        result["check_ok"] = False
+        return result
+
+
+def _github_check_inner(cfg: dict, result: dict) -> dict:
     owner, name, branch = _gh_source()
     token = _get_gh_token()
     try:
         info = _gh_branch_info(owner, name, branch, token)
     except ValueError as exc:
         result["notes"] = str(exc)
+        result["check_ok"] = False
         return result
     result.update({
         "latest_sha": info["sha"][:12],
@@ -278,9 +317,20 @@ def github_check() -> dict:
     result["remote_version"] = remote_ver
     last = cfg["last_applied_sha"]
     if last:
-        result["has_update"] = bool(info["sha"]) and info["sha"] != last
-        if not result["has_update"]:
+        if not info["sha"] or info["sha"] == last:
+            result["has_update"] = False
             result["notes"] = "已是该分支最新提交"
+        else:
+            changed = _gh_backend_changed(owner, name, last, info["sha"], token)
+            if changed is None:
+                result["has_update"] = True
+                result["notes"] = "无法确认改动范围，按有更新处理"
+            elif changed:
+                result["has_update"] = True
+                result["notes"] = "后端有新提交"
+            else:
+                result["has_update"] = False
+                result["notes"] = "新提交仅涉及前端，后端无需更新"
     elif remote_ver:
         result["has_update"] = _ver_gt(remote_ver, result["current_version"])
         if not result["has_update"]:
@@ -350,18 +400,30 @@ def _gh_dist_asset(release: dict) -> dict:
 
 
 def frontend_check() -> dict:
-    """检查前端 dist 是否有新构建。"""
+    """检查前端 dist 是否有新构建。任何意外异常都只写 notes，绝不向外抛 500。"""
     owner, name, _branch = _gh_source()
     result = {
         "repo": GH_FIXED_REPO, "release_tag": FE_RELEASE_TAG,
         "has_update": False, "notes": "",
         "asset_updated_at": "", "asset_size": 0,
         "applied_asset_updated_at": _get_setting(FE_UPDATED_KEY),
+        "check_ok": True,
     }
+    try:
+        return _frontend_check_inner(owner, name, result)
+    except Exception as exc:
+        result["notes"] = f"检查失败：{str(exc)[:150]}"
+        result["has_update"] = False
+        result["check_ok"] = False
+        return result
+
+
+def _frontend_check_inner(owner: str, name: str, result: dict) -> dict:
     try:
         asset = _gh_dist_asset(_gh_release(owner, name, _get_gh_token()))
     except ValueError as exc:
         result["notes"] = str(exc)
+        result["check_ok"] = False
         return result
     result["asset_updated_at"] = asset.get("updated_at") or ""
     result["asset_size"] = asset.get("size") or 0

@@ -9,7 +9,6 @@ import {
   Tag,
   Typography,
   Upload,
-  message,
 } from 'antd';
 import { DownloadOutlined, GithubOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons';
 import { FRONTEND_VERSION } from '../version';
@@ -54,6 +53,7 @@ export default function UpdateCenter() {
   const [version, setVersion] = useState('');
   const [checking, setChecking] = useState(false);
   const [check, setCheck] = useState<AllUpdateCheck | null>(null);
+  const [checkError, setCheckError] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [applying, setApplying] = useState(false);
   const [progressOpen, setProgressOpen] = useState(false);
@@ -64,29 +64,40 @@ export default function UpdateCenter() {
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<UpdateApplyResult | null>(null);
 
-  useEffect(() => {
-    getVersion()
-      .then((v) => setVersion(`${v.name} v${v.version}`))
-      .catch(() => {});
-  }, []);
-
-  const beHas = !!check?.backend.has_update;
-  const feHas = !!check?.frontend.has_update;
-
-  const doCheck = async () => {
+  /** 检查更新：失败也 inline 显示，绝不静默吞掉（之前 doCheck 无 catch，
+   *  检查一抛错按钮转一下就停，用户看不到任何反馈）。 */
+  const refreshCheck = async () => {
     setChecking(true);
+    setCheckError('');
     try {
       const info = await checkAllUpdate();
       setCheck(info);
-      if (!info.backend.has_update && !info.frontend.has_update) {
-        message.success('前后端均已是最新');
-        return;
-      }
-      setConfirmOpen(true);
+    } catch (e) {
+      setCheckError(e instanceof Error ? e.message : '检查更新失败');
     } finally {
       setChecking(false);
     }
   };
+
+  useEffect(() => {
+    getVersion()
+      .then((v) => setVersion(`${v.name} v${v.version}`))
+      .catch(() => {});
+    // 进页面先自动检查一次：有新版本“一键更新”才可用，已是最新则按钮置灰
+    refreshCheck();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const beHas = !!check?.backend.has_update;
+  const feHas = !!check?.frontend.has_update;
+  const hasUpdate = beHas || feHas;
+  /** 任一侧检查本身失败时，has_update 不可信，不能显示“已是最新” */
+  const checkFailed = !!check && (!check.backend.check_ok || !check.frontend.check_ok);
+  const checkFailNotes = check
+    ? [!check.backend.check_ok ? check.backend.notes : '', !check.frontend.check_ok ? check.frontend.notes : '']
+        .filter(Boolean)
+        .join('；')
+    : '';
 
   /** 执行一键更新；flags 决定更新哪一侧（重试后端时只传后端） */
   const runApply = async (updateBackend: boolean, updateFrontend: boolean) => {
@@ -113,6 +124,8 @@ export default function UpdateCenter() {
         if (!back) setStepError('后端 60 秒内未恢复，请手动刷新页面或检查容器日志');
       }
       setStep(3);
+      // 更新完刷新一次检查结果，让状态区变成“已是最新”
+      if (!r.backend_error) refreshCheck();
     } catch (e) {
       setStepError(e instanceof Error ? e.message : '更新失败');
       setStep(3);
@@ -138,10 +151,14 @@ export default function UpdateCenter() {
           <Button
             type="primary"
             icon={<DownloadOutlined />}
-            loading={checking || applying}
-            onClick={doCheck}
+            loading={applying}
+            disabled={checking || applying || !hasUpdate}
+            onClick={() => setConfirmOpen(true)}
           >
             一键更新
+          </Button>
+          <Button icon={<ReloadOutlined />} loading={checking} onClick={refreshCheck}>
+            重新检查
           </Button>
           <Upload
             accept=".zip"
@@ -164,17 +181,57 @@ export default function UpdateCenter() {
           </Upload>
         </Space>
         <Text type="secondary" style={{ fontSize: 12 }}>
-          一键更新先热更前端（刷新即生效），再从 GitHub 更新后端并自动重启；上传更新包为离线备用方式。
+          打开本页时自动检查一次；只有发现新版本时“一键更新”才可用。一键更新先热更前端（刷新即生效），再从 GitHub 更新后端并自动重启；上传更新包为离线备用方式。
         </Text>
-        {check && (beHas || feHas) && (
+        {checking && !check && (
+          <Alert type="info" showIcon message="正在检查更新…" />
+        )}
+        {checkError && (
+          <Alert
+            type="error"
+            showIcon
+            message={`检查更新失败：${checkError}`}
+            description="可能是连不上 GitHub，稍后可点“重新检查”再试。"
+            action={
+              <Button size="small" onClick={refreshCheck}>
+                重试检查
+              </Button>
+            }
+          />
+        )}
+        {!checking && !checkError && check && checkFailed && (
+          <Alert
+            type="error"
+            showIcon
+            message="检查更新失败，未确认是否为最新版本"
+            description={checkFailNotes || '请稍后重试检查。'}
+            action={
+              <Button size="small" onClick={refreshCheck}>
+                重试检查
+              </Button>
+            }
+          />
+        )}
+        {!checking && !checkError && check && !checkFailed && !hasUpdate && (
           <Alert
             type="success"
             showIcon
+            message="当前已是最新版本"
+            description={`后端：${check.backend.notes || '已是最新'}；前端：${check.frontend.notes || '已是最新'}`}
+          />
+        )}
+        {!checking && !checkError && check && !checkFailed && hasUpdate && (
+          <Alert
+            type="warning"
+            showIcon
             message={
               [
-                beHas ? `后端有新提交 ${check.backend.latest_sha}` : '后端已是最新',
+                beHas ? `后端有更新（新提交 ${check.backend.latest_sha}）` : '后端已是最新',
                 feHas ? '前端有新构建' : '前端已是最新',
               ].join('；')
+            }
+            description={
+              beHas && check.backend.latest_message ? check.backend.latest_message : undefined
             }
           />
         )}
