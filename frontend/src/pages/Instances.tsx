@@ -8,7 +8,6 @@ import {
   Input,
   InputNumber,
   Modal,
-  Popconfirm,
   Select,
   Space,
   Table,
@@ -18,6 +17,7 @@ import {
   message,
 } from 'antd';
 import { Link, useNavigate } from 'react-router-dom';
+import TerminateInstanceModal from '../components/TerminateInstanceModal';
 import {
   DeleteOutlined,
   EditOutlined,
@@ -85,6 +85,7 @@ export default function Instances() {
   const [regionLoading, setRegionLoading] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([]);
   const [opLoading, setOpLoading] = useState(false);
+  const [terminateTarget, setTerminateTarget] = useState<Instance | null>(null);
   // 阿里云新建实例（按量付费）
   const [createOpen, setCreateOpen] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
@@ -221,13 +222,14 @@ export default function Instances() {
     }
   };
 
-  /** 终止实例（Popconfirm 二次确认已在外层完成） */
-  const terminate = async (id: string) => {
+  /** 终止实例（确认弹窗里选择是否连带删除引导卷） */
+  const terminate = async (id: string, deleteBootVolume: boolean) => {
     if (tenantId === undefined) return;
     setOpLoading(true);
     try {
-      await terminateInstance(tenantId, id, true);
-      message.success('终止指令已发送，引导卷已保留');
+      await terminateInstance(tenantId, id, !deleteBootVolume);
+      message.success(deleteBootVolume ? '终止指令已发送，引导卷将一并删除' : '终止指令已发送，引导卷已保留');
+      setTerminateTarget(null);
     } finally {
       setOpLoading(false);
       refresh();
@@ -484,15 +486,9 @@ export default function Instances() {
               <Button type="text" size="small" icon={<SettingOutlined />} onClick={() => openShape(record)} />
             )}
           </Tooltip>
-          <Popconfirm
-            title="确定终止该实例吗？此操作不可恢复！"
-            description="引导卷将保留，可用于救援数据。"
-            onConfirm={() => terminate(record.id)}
-          >
-            <Tooltip title="终止实例">
-              <Button type="text" size="small" danger icon={<DeleteOutlined />} loading={opLoading} />
-            </Tooltip>
-          </Popconfirm>
+          <Tooltip title="终止实例">
+            <Button type="text" size="small" danger icon={<DeleteOutlined />} loading={opLoading} onClick={() => setTerminateTarget(record)} />
+          </Tooltip>
         </Space>
       ),
     },
@@ -599,6 +595,15 @@ export default function Instances() {
       >
         <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="输入新的实例显示名" maxLength={255} />
       </Modal>
+
+      {/* 终止实例确认弹窗 */}
+      <TerminateInstanceModal
+        open={terminateTarget !== null}
+        instanceName={terminateTarget?.name}
+        confirmLoading={opLoading}
+        onCancel={() => setTerminateTarget(null)}
+        onConfirm={(deleteBootVolume) => terminateTarget && terminate(terminateTarget.id, deleteBootVolume)}
+      />
 
       {/* 改 Shape 弹窗 */}
       <Modal

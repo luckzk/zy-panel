@@ -51,7 +51,7 @@
 | POST | /api/v1/instances/{instance_id}/power | 电源操作：start/stop/reboot（多云分发） |
 | PUT | /api/v1/instances/{instance_id}/name | 改实例名 |
 | PUT | /api/v1/instances/{instance_id}/shape | 改实例配置 shape（实例需关机） |
-| POST | /api/v1/instances/{instance_id}/terminate | 终止实例（二次确认由前端 Popconfirm 完成） |
+| POST | /api/v1/instances/{instance_id}/terminate | 终止实例（二次确认由前端确认弹窗完成，可选是否连带删除引导卷） |
 | GET | /api/v1/instances/{instance_id}/tabs/detail-extra | 详细信息 Tab：启动选项/映像/容量类型 |
 | GET | /api/v1/instances/{instance_id}/tabs/network | 网络 Tab：路由表/FQDN/附加 VNIC |
 | GET | /api/v1/instances/{instance_id}/tabs/storage | 存储 Tab：引导卷/数据卷扩展信息 |

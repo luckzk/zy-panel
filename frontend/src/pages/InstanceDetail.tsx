@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import TerminateInstanceModal from '../components/TerminateInstanceModal';
 import {
   Alert,
   Button,
@@ -127,9 +128,16 @@ export default function InstanceDetailPage() {
 
   // 操作类弹窗
   const [opLoading, setOpLoading] = useState(false);
+  const [terminateOpen, setTerminateOpen] = useState(false);
   const [imgModal, setImgModal] = useState(false);
   const [moveModal, setMoveModal] = useState(false);
   const [cmdModal, setCmdModal] = useState(false);
+  /** 确认类弹窗（声明式 Modal：antd 5.29 + React 19 下静态 Modal.confirm 不渲染） */
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+  const [diagRebootOpen, setDiagRebootOpen] = useState(false);
+  const [diagInterruptOpen, setDiagInterruptOpen] = useState(false);
+  const [confirmBusy, setConfirmBusy] = useState(false);
   const [compartments, setCompartments] = useState<{ value: string; label: string }[]>([]);
   const [histId, setHistId] = useState('');
   const [histContent, setHistContent] = useState('');
@@ -200,11 +208,11 @@ export default function InstanceDetailPage() {
     }
   };
 
-  const doTerminate = async () => {
+  const doTerminate = async (deleteBootVolume: boolean) => {
     setOpLoading(true);
     try {
-      await terminateInstance(tenantId, id, true);
-      message.success('终止请求已提交');
+      await terminateInstance(tenantId, id, !deleteBootVolume);
+      message.success(deleteBootVolume ? '终止请求已提交，引导卷将一并删除' : '终止请求已提交，引导卷已保留');
       navigate('/instances');
     } finally {
       setOpLoading(false);
@@ -294,6 +302,40 @@ export default function InstanceDetailPage() {
     );
   }
 
+  const openRename = () => {
+    if (!detail) return;
+    setRenameValue(detail.name);
+    setRenameOpen(true);
+  };
+  const doRename = async () => {
+    const v = renameValue.trim();
+    if (!v) { message.warning('请输入新的显示名'); return; }
+    setConfirmBusy(true);
+    try {
+      await renameInstance(tenantId, id, v);
+      message.success('已改名');
+      setRenameOpen(false);
+      loadDetail();
+    } catch {
+      /* 错误已由拦截器提示 */
+    } finally {
+      setConfirmBusy(false);
+    }
+  };
+  const doDiagAction = async (kind: 'DIAGNOSTICREBOOT' | 'SENDDIAGNOSTICINTERRUPT') => {
+    setConfirmBusy(true);
+    try {
+      await diagnosticAction(tenantId, id, kind);
+      message.success(kind === 'DIAGNOSTICREBOOT' ? '诊断重启已发送' : '诊断中断已发送');
+      setDiagRebootOpen(false);
+      setDiagInterruptOpen(false);
+    } catch {
+      /* 错误已由拦截器提示 */
+    } finally {
+      setConfirmBusy(false);
+    }
+  };
+
   const powerItems = [
     { key: 'start', label: '启动', icon: <PlayCircleOutlined />, onClick: () => doPower('start') },
     { key: 'stop', label: '停止', icon: <PauseCircleOutlined />, onClick: () => doPower('stop') },
@@ -301,16 +343,7 @@ export default function InstanceDetailPage() {
   ];
 
   const moreItems = [
-    { key: 'rename', label: '改名', onClick: () => {
-      Modal.confirm({
-        title: '修改实例显示名',
-        content: <Input id="rename-input" defaultValue={detail.name} />,
-        onOk: async () => {
-          const v = (document.getElementById('rename-input') as HTMLInputElement)?.value?.trim();
-          if (v) { await renameInstance(tenantId, id, v); message.success('已改名'); loadDetail(); }
-        },
-      });
-    } },
+    { key: 'rename', label: '改名', onClick: openRename },
     { key: 'image', label: '创建定制映像', onClick: () => setImgModal(true) },
     { key: 'move', label: '移动资源（换 compartment）', onClick: async () => {
       setMoveModal(true);
@@ -319,19 +352,8 @@ export default function InstanceDetailPage() {
         setCompartments(cs.map((c: { id: string; name: string }) => ({ value: c.id, label: c.name })));
       } catch { /* ignore */ }
     } },
-    { key: 'diag-reboot', label: '发送诊断重启', danger: true, onClick: () => {
-      Modal.confirm({
-        title: '发送诊断重启？', content: '将触发实例的诊断重启，用于内核级故障排查。',
-        okType: 'danger', onOk: async () => { await diagnosticAction(tenantId, id, 'DIAGNOSTICREBOOT'); message.success('诊断重启已发送'); },
-      });
-    } },
-    { key: 'diag-interrupt', label: '发送诊断中断', danger: true, onClick: () => {
-      Modal.confirm({
-        title: '发送诊断中断？',
-        content: '会导致操作系统崩溃并重启，可能造成数据损坏，仅用于高级故障排查。',
-        okType: 'danger', onOk: async () => { await diagnosticAction(tenantId, id, 'SENDDIAGNOSTICINTERRUPT'); message.success('诊断中断已发送'); },
-      });
-    } },
+    { key: 'diag-reboot', label: '发送诊断重启', danger: true, onClick: () => setDiagRebootOpen(true) },
+    { key: 'diag-interrupt', label: '发送诊断中断', danger: true, onClick: () => setDiagInterruptOpen(true) },
     { key: 'run-cmd', label: '在实例上运行命令', onClick: () => setCmdModal(true) },
   ];
 
@@ -360,13 +382,20 @@ export default function InstanceDetailPage() {
               <Dropdown menu={{ items: moreItems }} disabled={opLoading}>
                 <Button>更多操作 <DownOutlined /></Button>
               </Dropdown>
-              <Popconfirm title="确定终止该实例吗？此操作不可恢复！" description="引导卷将保留，可用于救援数据。" onConfirm={doTerminate}>
-                <Button danger loading={opLoading}>终止</Button>
-              </Popconfirm>
+              <Button danger loading={opLoading} onClick={() => setTerminateOpen(true)}>终止</Button>
             </Space>
           </Col>
         </Row>
       </Card>
+
+      {/* 终止实例确认弹窗 */}
+      <TerminateInstanceModal
+        open={terminateOpen}
+        instanceName={detail.name}
+        confirmLoading={opLoading}
+        onCancel={() => setTerminateOpen(false)}
+        onConfirm={(deleteBootVolume) => doTerminate(deleteBootVolume)}
+      />
 
       <Card>
         <Tabs
@@ -437,6 +466,42 @@ export default function InstanceDetailPage() {
             <Input.TextArea rows={6} placeholder="#!/bin/bash&#10;df -h" />
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* 修改实例显示名 */}
+      <Modal
+        title="修改实例显示名"
+        open={renameOpen}
+        onCancel={() => setRenameOpen(false)}
+        onOk={doRename}
+        confirmLoading={confirmBusy}
+        destroyOnClose
+      >
+        <Input value={renameValue} onChange={(e) => setRenameValue(e.target.value)} placeholder="新的实例显示名" />
+      </Modal>
+
+      {/* 发送诊断重启 */}
+      <Modal
+        title="发送诊断重启？"
+        open={diagRebootOpen}
+        onCancel={() => setDiagRebootOpen(false)}
+        onOk={() => doDiagAction('DIAGNOSTICREBOOT')}
+        okType="danger"
+        confirmLoading={confirmBusy}
+      >
+        将触发实例的诊断重启，用于内核级故障排查。
+      </Modal>
+
+      {/* 发送诊断中断 */}
+      <Modal
+        title="发送诊断中断？"
+        open={diagInterruptOpen}
+        onCancel={() => setDiagInterruptOpen(false)}
+        onOk={() => doDiagAction('SENDDIAGNOSTICINTERRUPT')}
+        okType="danger"
+        confirmLoading={confirmBusy}
+      >
+        会导致操作系统崩溃并重启，可能造成数据损坏，仅用于高级故障排查。
       </Modal>
     </div>
   );

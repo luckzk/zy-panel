@@ -210,7 +210,7 @@ def update_shape(instance_id: str, body: ShapeIn, _user: models.User = Depends(g
         return err(3100, "更改实例 Shape 失败", status=500)
 
 
-@router.post("/{instance_id}/terminate", summary="终止实例（二次确认由前端 Popconfirm 完成）")
+@router.post("/{instance_id}/terminate", summary="终止实例（二次确认由前端确认弹窗完成，可选是否连带删除引导卷）")
 def terminate_instance(instance_id: str, body: TerminateIn, _user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     tenant = _get_tenant_or_404(db, body.tenant_id)
     if tenant is None:
