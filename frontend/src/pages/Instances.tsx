@@ -84,7 +84,20 @@ export default function Instances() {
   const [regionOptions, setRegionOptions] = useState<CloudRegion[]>([]);
   const [regionLoading, setRegionLoading] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([]);
-  const [opLoading, setOpLoading] = useState(false);
+  /** 正在执行操作的实例 id 集合：加载态按实例区分，不再全表共用一个布尔值 */
+  const [opLoadingIds, setOpLoadingIds] = useState<ReadonlySet<string>>(new Set());
+  /** 批量操作进行中的动作（仅批量按钮用，行内按钮只看实例 id） */
+  const [batchOp, setBatchOp] = useState<PowerOp | null>(null);
+  const isOpLoading = (id: string) => opLoadingIds.has(id);
+  const markOpLoading = (ids: React.Key[], on: boolean) =>
+    setOpLoadingIds((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) {
+        if (on) next.add(String(id));
+        else next.delete(String(id));
+      }
+      return next;
+    });
   const [terminateTarget, setTerminateTarget] = useState<Instance | null>(null);
   // 阿里云新建实例（按量付费）
   const [createOpen, setCreateOpen] = useState(false);
@@ -200,9 +213,10 @@ export default function Instances() {
   );
 
   /** 电源操作（真实接口，支持批量） */
-  const powerOp = async (ids: React.Key[], action: PowerOp) => {
+  const powerOp = async (ids: React.Key[], action: PowerOp, batch = false) => {
     if (tenantId === undefined) return;
-    setOpLoading(true);
+    markOpLoading(ids, true);
+    if (batch) setBatchOp(action);
     let okCount = 0;
     try {
       for (const id of ids) {
@@ -217,7 +231,8 @@ export default function Instances() {
       if (fail === 0) message.success(`${POWER_LABEL[action]}指令已发送（${okCount} 台）`);
       else message.warning(`${POWER_LABEL[action]}完成：${okCount} 成功 / ${fail} 失败`);
     } finally {
-      setOpLoading(false);
+      markOpLoading(ids, false);
+      if (batch) setBatchOp(null);
       refresh();
     }
   };
@@ -225,13 +240,13 @@ export default function Instances() {
   /** 终止实例（确认弹窗里选择是否连带删除引导卷） */
   const terminate = async (id: string, deleteBootVolume: boolean) => {
     if (tenantId === undefined) return;
-    setOpLoading(true);
+    markOpLoading([id], true);
     try {
       await terminateInstance(tenantId, id, !deleteBootVolume);
       message.success(deleteBootVolume ? '终止指令已发送，引导卷将一并删除' : '终止指令已发送，引导卷已保留');
       setTerminateTarget(null);
     } finally {
-      setOpLoading(false);
+      markOpLoading([id], false);
       refresh();
     }
   };
@@ -461,13 +476,13 @@ export default function Instances() {
             <Button type="text" size="small" icon={<EyeOutlined />} onClick={() => openDetail(record)} />
           </Tooltip>
           <Tooltip title="启动">
-            <Button type="text" size="small" icon={<PlayCircleOutlined />} loading={opLoading} onClick={() => powerOp([record.id], 'start')} />
+            <Button type="text" size="small" icon={<PlayCircleOutlined />} loading={isOpLoading(record.id)} onClick={() => powerOp([record.id], 'start')} />
           </Tooltip>
           <Tooltip title="停止">
-            <Button type="text" size="small" icon={<PauseCircleOutlined />} loading={opLoading} onClick={() => powerOp([record.id], 'stop')} />
+            <Button type="text" size="small" icon={<PauseCircleOutlined />} loading={isOpLoading(record.id)} onClick={() => powerOp([record.id], 'stop')} />
           </Tooltip>
           <Tooltip title="重启">
-            <Button type="text" size="small" icon={<ReloadOutlined />} loading={opLoading} onClick={() => powerOp([record.id], 'reboot')} />
+            <Button type="text" size="small" icon={<ReloadOutlined />} loading={isOpLoading(record.id)} onClick={() => powerOp([record.id], 'reboot')} />
           </Tooltip>
           <Tooltip title="改名">
             <Button
@@ -487,7 +502,7 @@ export default function Instances() {
             )}
           </Tooltip>
           <Tooltip title="终止实例">
-            <Button type="text" size="small" danger icon={<DeleteOutlined />} loading={opLoading} onClick={() => setTerminateTarget(record)} />
+            <Button type="text" size="small" danger icon={<DeleteOutlined />} loading={isOpLoading(record.id)} onClick={() => setTerminateTarget(record)} />
           </Tooltip>
         </Space>
       ),
@@ -561,13 +576,13 @@ export default function Instances() {
           onChange={setStatusFilter}
           options={Object.entries(STATUS_TEXT).map(([value, label]) => ({ value, label }))}
         />
-        <Button disabled={!selectedKeys.length} loading={opLoading} onClick={() => powerOp(selectedKeys, 'start')}>
+        <Button disabled={!selectedKeys.length} loading={batchOp === 'start'} onClick={() => powerOp(selectedKeys, 'start', true)}>
           批量启动
         </Button>
-        <Button disabled={!selectedKeys.length} loading={opLoading} onClick={() => powerOp(selectedKeys, 'stop')}>
+        <Button disabled={!selectedKeys.length} loading={batchOp === 'stop'} onClick={() => powerOp(selectedKeys, 'stop', true)}>
           批量停止
         </Button>
-        <Button disabled={!selectedKeys.length} loading={opLoading} onClick={() => powerOp(selectedKeys, 'reboot')}>
+        <Button disabled={!selectedKeys.length} loading={batchOp === 'reboot'} onClick={() => powerOp(selectedKeys, 'reboot', true)}>
           批量重启
         </Button>
       </Space>
@@ -600,7 +615,7 @@ export default function Instances() {
       <TerminateInstanceModal
         open={terminateTarget !== null}
         instanceName={terminateTarget?.name}
-        confirmLoading={opLoading}
+        confirmLoading={terminateTarget ? isOpLoading(terminateTarget.id) : false}
         onCancel={() => setTerminateTarget(null)}
         onConfirm={(deleteBootVolume) => terminateTarget && terminate(terminateTarget.id, deleteBootVolume)}
       />
